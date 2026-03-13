@@ -173,8 +173,13 @@ private fun NetworkDetectionSection(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         if (uiState.isWifiConnected) {
+                            val displayName = if (uiState.wifiNetworkName.isNullOrEmpty()) {
+                                "Connecté (SSID non disponible)"
+                            } else {
+                                uiState.wifiNetworkName
+                            }
                             Text(
-                                text = uiState.wifiNetworkName ?: "Connecté",
+                                text = displayName,
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold
                             )

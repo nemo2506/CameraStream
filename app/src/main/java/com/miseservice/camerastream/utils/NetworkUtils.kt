@@ -133,6 +133,7 @@ object NetworkUtils {
 
     /**
      * Récupère le nom du réseau WiFi connecté
+     * Gère les cas "unknown ssid" et les formats mal encodés
      */
     fun getWifiNetworkName(context: Context): String? {
         return try {
@@ -140,12 +141,33 @@ object NetworkUtils {
             if (wifiManager != null) {
                 @Suppress("DEPRECATION")
                 val connectionInfo = wifiManager.connectionInfo
-                if (connectionInfo != null && !connectionInfo.ssid.isNullOrEmpty()) {
-                    return connectionInfo.ssid?.replace("\"", "")
+
+                if (connectionInfo != null) {
+                    val ssid = connectionInfo.ssid
+
+                    // Vérifier si SSID n'est pas null ou vide
+                    if (!ssid.isNullOrEmpty()) {
+                        // Nettoyer le SSID
+                        val cleanedSsid = ssid
+                            .trim()
+                            .replace("\"", "")
+                            .replace("<unknown ssid>", "")
+                            .trim()
+
+                        // Si le SSID a du contenu après nettoyage
+                        if (cleanedSsid.isNotEmpty()) {
+                            return cleanedSsid
+                        }
+                    }
+
+                    // Fallback: SSID non disponible (permission location non accordée)
+                    // Retourner null pour laisser l'interface afficher "WiFi non détecté"
+                    return null
                 }
             }
             null
         } catch (e: Exception) {
+            android.util.Log.e("NetworkUtils", "Error getting WiFi name: ${e.message}", e)
             e.printStackTrace()
             null
         }
