@@ -72,10 +72,9 @@ class CameraStreamService : Service() {
                 val notification = createNotification("Streaming actif")
                 startForeground(NOTIFICATION_ID, notification)
 
-                // Acquire wake lock if not already acquired
-                if (wakeLock?.isHeld != true) {
-                    acquireWakeLock()
-                }
+                // ✅ N'pas acquérir automatiquement le WakeLock
+                // L'utilisateur contrôle cela via le bouton toggle
+                android.util.Log.d("CameraStreamService", "Streaming started (WakeLock not auto-acquired)")
             } catch (e: Exception) {
                 e.printStackTrace()
                 android.util.Log.e("CameraStreamService", "Error starting streaming: ${e.message}", e)
@@ -86,14 +85,22 @@ class CameraStreamService : Service() {
 
     private fun stopStreaming() {
         try {
+            android.util.Log.d("CameraStreamService", "Stopping streaming...")
+
             httpServer?.stop()
             httpServer = null
             cameraManager?.release()
             cameraManager = null
+
+            // ✅ S'assurer que WakeLock est libéré
             releaseWakeLock()
+
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
+
+            android.util.Log.d("CameraStreamService", "Streaming stopped")
         } catch (e: Exception) {
+            android.util.Log.e("CameraStreamService", "Error stopping streaming: ${e.message}", e)
             e.printStackTrace()
         }
     }
@@ -103,29 +110,46 @@ class CameraStreamService : Service() {
     }
 
     private fun toggleWakeLock() {
-        if (wakeLock?.isHeld == true) {
-            releaseWakeLock()
-        } else {
-            acquireWakeLock()
+        try {
+            if (wakeLock?.isHeld == true) {
+                android.util.Log.d("CameraStreamService", "Releasing WakeLock")
+                releaseWakeLock()
+            } else {
+                android.util.Log.d("CameraStreamService", "Acquiring WakeLock")
+                acquireWakeLock()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("CameraStreamService", "Error toggling WakeLock: ${e.message}", e)
         }
     }
 
     private fun acquireWakeLock() {
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
-            "CameraStream:WakeLock"
-        ).apply {
-            setReferenceCounted(false)
-            acquire()
+        try {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = powerManager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "CameraStream:WakeLock"
+            ).apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+            android.util.Log.d("CameraStreamService", "WakeLock acquired: ${wakeLock?.isHeld}")
+        } catch (e: Exception) {
+            android.util.Log.e("CameraStreamService", "Error acquiring WakeLock: ${e.message}", e)
         }
     }
 
     private fun releaseWakeLock() {
-        if (wakeLock?.isHeld == true) {
-            wakeLock?.release()
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+                android.util.Log.d("CameraStreamService", "WakeLock released")
+            }
+            wakeLock = null
+        } catch (e: Exception) {
+            android.util.Log.e("CameraStreamService", "Error releasing WakeLock: ${e.message}", e)
+            wakeLock = null
         }
-        wakeLock = null
     }
 
     private fun createNotificationChannel() {

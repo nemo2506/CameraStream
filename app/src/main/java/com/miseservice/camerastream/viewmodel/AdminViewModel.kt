@@ -100,7 +100,10 @@ class AdminViewModel(private val context: Context) : ViewModel() {
         } else {
             context.startService(intent)
         }
-        _uiState.value = _uiState.value.copy(isStreaming = true)
+        _uiState.value = _uiState.value.copy(
+            isStreaming = true,
+            isWakeLockActive = true  // ✅ WakeLock est automatiquement activé au démarrage
+        )
     }
 
     fun stopStreaming() {
@@ -108,7 +111,10 @@ class AdminViewModel(private val context: Context) : ViewModel() {
             action = CameraStreamService.ACTION_STOP
         }
         context.startService(intent)
-        _uiState.value = _uiState.value.copy(isStreaming = false)
+        _uiState.value = _uiState.value.copy(
+            isStreaming = false,
+            isWakeLockActive = false  // ✅ WakeLock est désactivé à l'arrêt
+        )
     }
 
     fun switchCamera() {
@@ -124,7 +130,10 @@ class AdminViewModel(private val context: Context) : ViewModel() {
             action = CameraStreamService.ACTION_TOGGLE_WAKE_LOCK
         }
         context.startService(intent)
-        _uiState.value = _uiState.value.copy(isWakeLockActive = !_uiState.value.isWakeLockActive)
+        // ✅ Toggle l'état et log
+        val newState = !_uiState.value.isWakeLockActive
+        android.util.Log.d("AdminViewModel", "Toggling WakeLock to: $newState")
+        _uiState.value = _uiState.value.copy(isWakeLockActive = newState)
     }
 
     fun copyUrlToClipboard() {
