@@ -17,14 +17,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraFront
 import androidx.compose.material.icons.filled.CameraRear
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -36,7 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -44,11 +45,7 @@ import com.miseservice.camerastream.viewmodel.AdminViewModel
 
 @Composable
 fun AdminScreen(viewModel: AdminViewModel, modifier: Modifier = Modifier) {
-    val isStreaming by viewModel.isStreaming.collectAsState()
-    val streamingUrl by viewModel.streamingUrl.collectAsState()
-    val isFrontCamera by viewModel.isFrontCamera.collectAsState()
-    val isWakeLockActive by viewModel.isWakeLockActive.collectAsState()
-    val localIp by viewModel.localIp.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
     Column(
         modifier = modifier
@@ -66,36 +63,161 @@ fun AdminScreen(viewModel: AdminViewModel, modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onBackground
         )
 
+        // Détection Réseau Section
+        NetworkDetectionSection(
+            uiState = uiState,
+            onRefresh = { viewModel.refreshNetworkDetection() }
+        )
+
         // Status Card
-        StatusCard(isStreaming = isStreaming)
+        StatusCard(isStreaming = uiState.isStreaming)
 
         // Control Buttons
         ControlButtonsSection(
-            isStreaming = isStreaming,
+            isStreaming = uiState.isStreaming,
             onStartStreaming = { viewModel.startStreaming() },
             onStopStreaming = { viewModel.stopStreaming() }
         )
 
         // Camera Selection
         CameraSelectionCard(
-            isFrontCamera = isFrontCamera,
+            isFrontCamera = uiState.isFrontCamera,
             onSwitchCamera = { viewModel.switchCamera() }
         )
 
         // Network Information
         NetworkInfoCard(
-            localIp = localIp,
-            streamingUrl = streamingUrl,
+            localIp = uiState.localIpAddress,
+            streamingUrl = uiState.streamingUrl,
             onCopyUrl = { viewModel.copyUrlToClipboard() }
         )
 
         // Wake Lock Control
         WakeLockCard(
-            isWakeLockActive = isWakeLockActive,
+            isWakeLockActive = uiState.isWakeLockActive,
             onToggleWakeLock = { viewModel.toggleWakeLock() }
         )
 
         Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun NetworkDetectionSection(
+    uiState: com.miseservice.camerastream.viewmodel.AdminUiState,
+    onRefresh: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Titre avec bouton refresh
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "🔍 Détection Réseau",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Rafraîchir",
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            // Contenu
+            if (uiState.isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(40.dp)
+                    )
+                }
+            } else if (uiState.errorMessage != null) {
+                Text(
+                    text = "⚠️ ${uiState.errorMessage}",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(8.dp)
+                )
+            } else {
+                // WiFi connecté
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "WiFi",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (uiState.isWifiConnected) {
+                            Text(
+                                text = uiState.wifiNetworkName ?: "Connecté",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        } else {
+                            Text(
+                                text = "Non connecté",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+
+                    Icon(
+                        imageVector = if (uiState.isWifiConnected) Icons.Default.Wifi else Icons.Default.WifiOff,
+                        contentDescription = "WiFi",
+                        tint = if (uiState.isWifiConnected) Color.Green else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Adresse IP
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        text = "📍 Adresse IP Locale",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = uiState.localIpAddress ?: "Détection en cours...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -194,7 +316,7 @@ private fun CameraSelectionCard(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "Sélection de la caméra",
+                text = "🎥 Sélection de la caméra",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -276,7 +398,7 @@ private fun NetworkInfoCard(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "Informations de connexion",
+                text = "🌐 Informations de connexion",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -285,7 +407,7 @@ private fun NetworkInfoCard(
             Spacer(modifier = Modifier.height(12.dp))
 
             if (localIp != null) {
-                InfoRow(label = "Adresse IP locale", value = localIp)
+                InfoRow(label = "📍 Adresse IP locale", value = localIp)
             } else {
                 Text(
                     text = "WiFi non connecté",
@@ -311,7 +433,7 @@ private fun NetworkInfoCard(
                             .padding(end = 8.dp)
                     ) {
                         Text(
-                            text = "URL de streaming",
+                            text = "🎬 URL de streaming",
                             fontSize = 12.sp,
                             color = Color.Gray
                         )
@@ -320,7 +442,8 @@ private fun NetworkInfoCard(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
                             color = Color.Black,
-                            maxLines = 2
+                            maxLines = 2,
+                            fontFamily = FontFamily.Monospace
                         )
                     }
 
@@ -367,7 +490,7 @@ private fun WakeLockCard(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = "Mode veille",
+                    text = "⚡ Mode veille",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -404,8 +527,8 @@ private fun InfoRow(label: String, value: String) {
             text = value,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
-            color = Color.Black
+            color = Color.Black,
+            fontFamily = FontFamily.Monospace
         )
     }
 }
-
