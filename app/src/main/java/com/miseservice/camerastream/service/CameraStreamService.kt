@@ -78,6 +78,7 @@ class CameraStreamService : Service() {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+                android.util.Log.e("CameraStreamService", "Error starting streaming: ${e.message}", e)
                 stopSelf()
             }
         }

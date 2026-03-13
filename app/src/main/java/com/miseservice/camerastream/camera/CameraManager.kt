@@ -10,6 +10,7 @@ import android.media.Image
 import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
+import android.util.Log
 import android.util.Size
 import android.view.Surface
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,60 +34,117 @@ class CameraManager(
 
     private val cameraDeviceCallback = object : CameraDevice.StateCallback() {
         override fun onOpened(camera: CameraDevice) {
+            Log.d("CameraManager", "Camera opened")
             cameraDevice = camera
+            createCaptureSession()
         }
 
         override fun onDisconnected(device: CameraDevice) {
+            Log.d("CameraManager", "Camera disconnected")
             device.close()
             cameraDevice = null
         }
 
         override fun onError(device: CameraDevice, error: Int) {
+            Log.e("CameraManager", "Camera error: $error")
             device.close()
             cameraDevice = null
         }
     }
 
     private val imageAvailableListener = ImageReader.OnImageAvailableListener { reader ->
-        val image = reader.acquireLatestImage()
-        if (image != null) {
-            val nv21 = imageToNV21(image)
-            image.close()
-            _latestFrameData.value = nv21
+        try {
+            val image = reader.acquireLatestImage()
+            if (image != null) {
+                val nv21 = imageToNV21(image)
+                image.close()
+                _latestFrameData.value = nv21
+            }
+        } catch (e: Exception) {
+            Log.e("CameraManager", "Error processing image: ${e.message}", e)
         }
     }
 
     @SuppressLint("MissingPermission")
     fun initializeCamera() {
-        handlerThread = HandlerThread("CameraThread").apply {
-            start()
-            handler = Handler(looper)
-        }
-
-        // Get camera IDs
-        val cameraIds = cameraManager.cameraIdList
-        currentCameraId = if (isUsingFrontCamera) {
-            cameraIds.firstOrNull { id ->
-                val characteristics = cameraManager.getCameraCharacteristics(id)
-                characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
-            } ?: ""
-        } else {
-            cameraIds.firstOrNull { id ->
-                val characteristics = cameraManager.getCameraCharacteristics(id)
-                characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
-            } ?: ""
-        }
-
-        if (currentCameraId.isEmpty()) return
-
-        // Create ImageReader for preview
-        imageReader = ImageReader.newInstance(1280, 720, android.graphics.ImageFormat.NV21, 2)
-        imageReader?.setOnImageAvailableListener(imageAvailableListener, handler)
-
-        // Open camera
         try {
+            handlerThread = HandlerThread("CameraThread").apply {
+                start()
+                handler = Handler(looper)
+            }
+
+            // Get camera IDs
+            val cameraIds = cameraManager.cameraIdList
+            if (cameraIds.isEmpty()) {
+                Log.e("CameraManager", "No cameras available")
+                return
+            }
+
+            currentCameraId = if (isUsingFrontCamera) {
+                cameraIds.firstOrNull { id ->
+                    try {
+                        val characteristics = cameraManager.getCameraCharacteristics(id)
+                        characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+                    } catch (e: Exception) {
+                        false
+                    }
+                } ?: cameraIds.first()
+            } else {
+                cameraIds.firstOrNull { id ->
+                    try {
+                        val characteristics = cameraManager.getCameraCharacteristics(id)
+                        characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
+                    } catch (e: Exception) {
+                        false
+                    }
+                } ?: cameraIds.first()
+            }
+
+            Log.d("CameraManager", "Using camera: $currentCameraId (front=$isUsingFrontCamera)")
+
+            // Create ImageReader for preview (use YUV format)
+            imageReader = ImageReader.newInstance(1280, 720, android.graphics.ImageFormat.YUV_420_888, 2)
+            imageReader?.setOnImageAvailableListener(imageAvailableListener, handler)
+
+            // Open camera
             cameraManager.openCamera(currentCameraId, cameraDeviceCallback, handler)
+
+            Log.d("CameraManager", "Camera initialization started")
         } catch (e: Exception) {
+            Log.e("CameraManager", "Error initializing camera: ${e.message}", e)
+            e.printStackTrace()
+        }
+    }
+
+    private fun createCaptureSession() {
+        try {
+            if (cameraDevice == null || imageReader == null || handler == null) {
+                Log.e("CameraManager", "Camera device, imageReader or handler is null")
+                return
+            }
+
+            val surface = imageReader!!.surface
+            cameraDevice!!.createCaptureSession(
+                listOf(surface),
+                object : CameraCaptureSession.StateCallback() {
+                    override fun onConfigured(session: CameraCaptureSession) {
+                        Log.d("CameraManager", "Capture session configured")
+                        captureSessions.add(session)
+                        val captureRequest = cameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
+                            addTarget(surface)
+                        }
+                        session.setRepeatingRequest(captureRequest.build(), null, handler)
+                    }
+
+                    override fun onConfigureFailed(session: CameraCaptureSession) {
+                        Log.e("CameraManager", "Capture session configuration failed")
+                        session.close()
+                    }
+                },
+                handler
+            )
+        } catch (e: Exception) {
+            Log.e("CameraManager", "Error creating capture session: ${e.message}", e)
             e.printStackTrace()
         }
     }
@@ -116,17 +174,25 @@ class CameraManager(
     }
 
     fun release() {
-        captureSessions.forEach { it.close() }
-        captureSessions.clear()
-        cameraDevice?.close()
-        cameraDevice = null
-        imageReader?.close()
-        imageReader = null
-        handlerThread?.quit()
-        handlerThread = null
-        handler = null
+        try {
+            captureSessions.forEach {
+                try {
+                    it.close()
+                } catch (e: Exception) {
+                    Log.e("CameraManager", "Error closing session: ${e.message}")
+                }
+            }
+            captureSessions.clear()
+            cameraDevice?.close()
+            cameraDevice = null
+            imageReader?.close()
+            imageReader = null
+            handlerThread?.quit()
+            handlerThread = null
+            handler = null
+            Log.d("CameraManager", "Camera released")
+        } catch (e: Exception) {
+            Log.e("CameraManager", "Error releasing camera: ${e.message}", e)
+        }
     }
 }
-
-
-
