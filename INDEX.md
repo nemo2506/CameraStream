@@ -80,13 +80,19 @@ Bienvenue dans la documentation du projet **CameraStream**. Ce fichier vous aide
 
 ### Pour Tester l'Application
 
-1. **[test-camerastream.bat](test-camerastream.bat)** - Script de test Windows
+1. **[AUTO_IP_DETECTION.md](AUTO_IP_DETECTION.md)** ⭐ **- Détection Automatique IP** (Important!)
+   - Scripts automatiques pour détecter l'IP
+   - `detect-ip.sh` pour Linux/Mac
+   - `detect-ip.bat` pour Windows
+   - Guide complet de troubleshooting
+
+2. **[test-camerastream.bat](test-camerastream.bat)** - Script de test Windows
    - Compilation automatique
    - Installation sur device
    - Lancement
    - Verification
 
-2. **[test-camerastream.sh](test-camerastream.sh)** - Script de test Linux/Mac
+3. **[test-camerastream.sh](test-camerastream.sh)** - Script de test Linux/Mac
    - Compilation automatique
    - Installation sur device
    - Lancement
@@ -219,6 +225,11 @@ CameraStream/
 - [QUICKSTART.md](QUICKSTART.md) - "Prérequis" et "Installation"
 - [README.md](README.md) - "Installation"
 - [ARCHITECTURE.md](ARCHITECTURE.md) - "Configuration Build"
+
+### Détection IP & Réseau ⭐ (Nouveau!)
+- **[AUTO_IP_DETECTION.md](AUTO_IP_DETECTION.md)** - Guide complet détection IP automatique
+- [QUICKSTART.md](QUICKSTART.md) - "Détection Automatique de l'IP"
+- [README.md](README.md) - "Scripts de Détection IP"
 
 ### Utilisation
 - [QUICKSTART.md](QUICKSTART.md) - "Première Utilisation"
