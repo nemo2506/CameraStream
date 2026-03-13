@@ -98,11 +98,34 @@ CameraStream/
 ```
 
 ### Accès au streaming
+
 1. Ouvrir l'app sur le téléphone
 2. Accorder les permissions (caméra, réseau, etc.)
-3. Cliquer "Démarrer"
-4. L'URL s'affiche : `http://192.168.x.x:8080/stream`
-5. Copier l'URL et ouvrir dans navigateur/VLC sur n'importe quel device du réseau
+3. **Détecter l'IP automatiquement** ⭐ (Important!)
+   ```bash
+   # Linux/Mac
+   ./detect-ip.sh
+   
+   # Windows
+   detect-ip.bat
+   ```
+4. Cliquer "Démarrer" dans l'app
+5. L'URL s'affiche : `http://192.168.x.x:8080/stream`
+6. Copier l'URL et ouvrir dans navigateur/VLC sur n'importe quel device du réseau
+
+### Scripts de Détection IP
+
+L'application inclut des **scripts de détection automatique** pour trouver facilement l'adresse IP du téléphone :
+
+- **`detect-ip.sh`** - Linux/Mac (Bash)
+- **`detect-ip.bat`** - Windows (Batch)
+
+Ces scripts :
+- ✅ Trouvent automatiquement les devices Android connectés
+- ✅ Détectent l'adresse IP locale
+- ✅ Testent la connexion au serveur
+- ✅ Créent un fichier de configuration
+- ✅ Affichent l'URL de streaming prête à l'emploi
 
 ### Commandes curl pour tester
 ```bash

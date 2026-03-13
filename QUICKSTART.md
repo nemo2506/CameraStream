@@ -27,6 +27,53 @@ cd CameraStream
 - Ouvrir l'application "Camera Stream" sur le téléphone
 - Accepter toutes les permissions demandées
 
+---
+
+## Détection Automatique de l'IP (Important!)
+
+### Option A: Script Automatique (Recommandé)
+
+**Linux/Mac:**
+```bash
+chmod +x detect-ip.sh
+./detect-ip.sh
+```
+
+**Windows:**
+```batch
+detect-ip.bat
+```
+
+✅ Cela va:
+1. Trouver votre device Android connecté
+2. Détecter automatiquement l'IP locale
+3. Tester la connexion
+4. Afficher l'URL de streaming
+5. Créer un fichier de configuration
+
+**Exemple de sortie:**
+```
+✅ IP Address Detected Successfully!
+
+📱 Device IP: 192.168.1.100
+🌐 Streaming URL: http://192.168.1.100:8080/stream
+📊 Status URL: http://192.168.1.100:8080/status
+```
+
+### Option B: Détection Manuelle
+
+Si le script automatique ne fonctionne pas:
+
+```bash
+# Via ADB (device doit être connecté en USB et en débogage)
+adb shell getprop dhcp.wlan0.ipaddress
+
+# Ou via l'app elle-même
+# L'IP s'affiche dans l'écran d'administration
+```
+
+---
+
 ## Première Utilisation
 
 ### Écran d'Administration

@@ -1,6 +1,32 @@
 # Commandes curl pour Tester CameraStream
 
-## Configuration Initiale
+## Configuration Initiale (Automatique)
+
+### Détection Automatique de l'IP
+
+```bash
+# Linux/Mac - Détecter l'IP locale automatiquement
+IP=$(adb shell ip route | grep -oP '(?<=src )[\d.]+' | head -1)
+if [ -z "$IP" ]; then
+    # Alternative: utiliser getprop
+    IP=$(adb shell getprop dhcp.wlan0.ipaddress)
+fi
+if [ -z "$IP" ]; then
+    echo "Error: Could not detect device IP"
+    echo "Connect device via ADB and enable USB debugging"
+    exit 1
+fi
+
+PORT=8080
+STREAM_URL="http://$IP:$PORT/stream"
+STATUS_URL="http://$IP:$PORT/status"
+
+echo "Detected IP: $IP"
+echo "Stream URL: $STREAM_URL"
+echo "Status URL: $STATUS_URL"
+```
+
+### Configuration Manuelle (si automatique ne fonctionne pas)
 
 ```bash
 # Remplacer X.X.X.X par l'IP réelle du téléphone
@@ -8,6 +34,22 @@ IP=192.168.x.x
 PORT=8080
 STREAM_URL="http://$IP:$PORT/stream"
 STATUS_URL="http://$IP:$PORT/status"
+```
+
+### Obtenir l'IP du Téléphone
+
+```bash
+# Méthode 1: Via adb (si le device est connecté)
+adb shell ip route | grep -oP '(?<=src )[\d.]+'
+
+# Méthode 2: Via adb getprop
+adb shell getprop dhcp.wlan0.ipaddress
+
+# Méthode 3: Depuis l'app elle-même
+# L'adresse IP s'affiche dans l'écran d'administration
+
+# Méthode 4: Via Wi-Fi sur le téléphone
+# Paramètres → Wi-Fi → [Réseau connecté] → Propriétés
 ```
 
 ## 1. Test de Connectivité
