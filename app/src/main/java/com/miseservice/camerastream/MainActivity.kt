@@ -52,6 +52,9 @@ private fun MainContent(context: android.content.Context, modifier: Modifier = M
             Manifest.permission.CAMERA,
             Manifest.permission.INTERNET,
             Manifest.permission.ACCESS_NETWORK_STATE,
+            Manifest.permission.ACCESS_WIFI_STATE,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.WAKE_LOCK,
             Manifest.permission.FOREGROUND_SERVICE
         )
