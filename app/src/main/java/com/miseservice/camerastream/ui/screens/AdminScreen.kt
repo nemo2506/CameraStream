@@ -36,8 +36,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.miseservice.camerastream.viewmodel.AdminViewModel
@@ -114,6 +119,30 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
+private fun EmojiText(
+    emoji: String,
+    label: String,
+    fontSize: TextUnit,
+    fontWeight: FontWeight,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Text(
+        modifier = modifier,
+        text = buildAnnotatedString {
+            withStyle(SpanStyle(fontSize = fontSize * 2f)) {
+                append(emoji)
+                append(" ")
+            }
+            append(label)
+        },
+        fontSize = fontSize,
+        fontWeight = fontWeight,
+        color = color
+    )
+}
+
+@Composable
 private fun NetworkDetectionSection(
     uiState: com.miseservice.camerastream.viewmodel.AdminUiState,
     onRefresh: () -> Unit,
@@ -136,10 +165,12 @@ private fun NetworkDetectionSection(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "🔍 Détection Réseau",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                EmojiText(
+                    emoji = "🔍",
+                    label = "Détection Réseau",
+                    fontSize = MaterialTheme.typography.titleMedium.fontSize,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
                 IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
@@ -164,10 +195,12 @@ private fun NetworkDetectionSection(
                     )
                 }
             } else if (uiState.errorMessage != null) {
-                Text(
-                    text = "⚠️ ${uiState.errorMessage}",
+                EmojiText(
+                    emoji = "⚠️",
+                    label = uiState.errorMessage.orEmpty(),
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                    fontWeight = FontWeight.Normal,
                     color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(8.dp)
                 )
             } else {
@@ -224,9 +257,11 @@ private fun NetworkDetectionSection(
                         .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
                         .padding(12.dp)
                 ) {
-                    Text(
-                        text = "📍 Adresse IP Locale",
-                        style = MaterialTheme.typography.labelSmall,
+                    EmojiText(
+                        emoji = "📍",
+                        label = "Adresse IP Locale",
+                        fontSize = MaterialTheme.typography.labelSmall.fontSize,
+                        fontWeight = FontWeight.Normal,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
@@ -354,8 +389,9 @@ private fun CameraSelectionCard(
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            Text(
-                text = "🎥 Sélection de la caméra",
+            EmojiText(
+                emoji = "🎥",
+                label = "Sélection de la caméra",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -437,8 +473,9 @@ private fun NetworkInfoCard(
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            Text(
-                text = "🌐 Url de streaming",
+            EmojiText(
+                emoji = "🌐",
+                label = "Url de streaming",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -514,8 +551,9 @@ private fun WakeLockCard(
             Column(
                 modifier = Modifier.weight(1f)
             ) {
-                Text(
-                    text = "⚡ Mode veille écran",
+                EmojiText(
+                    emoji = "⚡",
+                    label = "Mode veille écran",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
