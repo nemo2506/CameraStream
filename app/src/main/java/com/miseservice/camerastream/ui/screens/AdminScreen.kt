@@ -1,6 +1,8 @@
 package com.miseservice.camerastream.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,6 +66,7 @@ fun AdminScreen(viewModel: AdminViewModel, modifier: Modifier = Modifier) {
     val scrollState = rememberScrollState()
     val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
+    val streamingUrlBringIntoViewRequester = remember { BringIntoViewRequester() }
 
     Column(
         modifier = modifier
@@ -101,6 +104,7 @@ fun AdminScreen(viewModel: AdminViewModel, modifier: Modifier = Modifier) {
         )
 
         NetworkInfoCard(
+            modifier = Modifier.bringIntoViewRequester(streamingUrlBringIntoViewRequester),
             streamingUrl = uiState.streamingUrl,
             onCopyUrl = { viewModel.copyUrlToClipboard() }
         )
@@ -114,7 +118,7 @@ fun AdminScreen(viewModel: AdminViewModel, modifier: Modifier = Modifier) {
                 viewModel.setStreamingPort(it)
                 focusManager.clearFocus(force = true)
                 coroutineScope.launch {
-                    scrollState.animateScrollTo(0)
+                    streamingUrlBringIntoViewRequester.bringIntoView()
                 }
             }
         )
@@ -592,13 +596,14 @@ private fun CameraSelectionCard(
 
 @Composable
 private fun NetworkInfoCard(
+    modifier: Modifier = Modifier,
     streamingUrl: String?,
     onCopyUrl: () -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         shape = RoundedCornerShape(12.dp)
     ) {
