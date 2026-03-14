@@ -108,6 +108,44 @@ Protocole principal: **WebRTC** (ICE + DTLS + SRTP) pour le media, avec signalin
    - `http://<ip-telephone>:8080/viewer`
 5. (Optionnel) Placer Apache en reverse proxy HTTPS vers `http://<ip-telephone>:8080`.
 
+Exemple de fichier Apache (`/etc/apache2/sites-available/camerastream.conf`) :
+
+```apache
+# /etc/apache2/sites-available/phonestream.conf
+
+<VirtualHost *:80>
+    ServerName cam.exemple.com
+
+    RewriteEngine On
+    RewriteRule ^/(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName cam.exemple.com
+
+    SSLEngine on
+    SSLCertificateFile    /etc/letsencrypt/live/cam.exemple.com/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/cam.exemple.com/privkey.pem
+
+    ErrorLog  "|/usr/bin/cronolog /home/[USERNAME]/SITES/logs/%Y-%m-%d-exemple-error.log"
+    CustomLog "|/usr/bin/cronolog /home/[USERNAME]/SITES/logs/%Y-%m-%d-exemple-access.log" combined
+
+    ProxyRequests Off
+    ProxyPreserveHost Off
+    ProxyTimeout 3600
+    SSLProxyEngine On
+
+    RedirectMatch ^/$ /viewer
+
+    ProxyPass        / http://192.168.XXX.XXX:8080/
+    ProxyPassReverse / http://192.168.XXX.XXX:8080/
+
+    Header always set Access-Control-Allow-Origin "*"
+    Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Content-Type, Authorization"
+</VirtualHost>
+```
+
 ## Build local 🛠️
 
 ```powershell
