@@ -40,6 +40,8 @@ class CameraStreamService : Service() {
         const val ACTION_START = "com.miseservice.camerastream.ACTION_START"
         const val ACTION_STOP = "com.miseservice.camerastream.ACTION_STOP"
         const val ACTION_SWITCH_CAMERA = "com.miseservice.camerastream.ACTION_SWITCH_CAMERA"
+        const val ACTION_APP_FOREGROUND = "com.miseservice.camerastream.ACTION_APP_FOREGROUND"
+        const val ACTION_APP_BACKGROUND = "com.miseservice.camerastream.ACTION_APP_BACKGROUND"
         const val EXTRA_STREAMING_PORT = "extra_streaming_port"
     }
 
@@ -52,11 +54,18 @@ class CameraStreamService : Service() {
         when (intent?.action) {
             ACTION_START -> {
                 val requestedPort = intent.getIntExtra(EXTRA_STREAMING_PORT, DEFAULT_STREAMING_PORT)
-                currentStreamingPort = if (requestedPort in 1..65535) requestedPort else DEFAULT_STREAMING_PORT
-                startStreaming()
+                val validatedPort = if (requestedPort in 1..65535) requestedPort else DEFAULT_STREAMING_PORT
+                if (isStreamingRuntimeStarted && validatedPort != currentStreamingPort) {
+                    applyPortWhileStreaming(validatedPort)
+                } else {
+                    currentStreamingPort = validatedPort
+                    startStreaming()
+                }
             }
             ACTION_STOP -> stopStreaming()
             ACTION_SWITCH_CAMERA -> switchCamera()
+            ACTION_APP_FOREGROUND -> streamingRuntime.onAppBackgroundChanged(false)
+            ACTION_APP_BACKGROUND -> streamingRuntime.onAppBackgroundChanged(true)
             else -> startStreaming()
         }
 
@@ -105,6 +114,29 @@ class CameraStreamService : Service() {
             android.util.Log.e("CameraStreamService", "Error stopping streaming: ${e.message}", e)
             e.printStackTrace()
         }
+    }
+
+    private fun applyPortWhileStreaming(newPort: Int) {
+        scope.launch(Dispatchers.Default) {
+            try {
+                android.util.Log.d(
+                    "CameraStreamService",
+                    "Applying new port while streaming: $currentStreamingPort -> $newPort"
+                )
+                currentStreamingPort = newPort
+                streamingRuntime.start(currentStreamingPort)
+                updateForegroundNotification()
+                acquireWakeLock()
+            } catch (e: Exception) {
+                android.util.Log.e("CameraStreamService", "Error applying new port: ${e.message}", e)
+            }
+        }
+    }
+
+    private fun updateForegroundNotification() {
+        val notification = createNotification("Streaming WebRTC actif")
+        val manager = getSystemService(NotificationManager::class.java)
+        manager?.notify(NOTIFICATION_ID, notification)
     }
 
     private fun switchCamera() {

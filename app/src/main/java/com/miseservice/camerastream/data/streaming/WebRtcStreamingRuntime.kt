@@ -14,21 +14,35 @@ class WebRtcStreamingRuntime @Inject constructor(
 
     private var webRtcEngine: WebRtcEngine? = null
     private var signalingServer: WebRtcHttpServer? = null
+    private var currentPort: Int? = null
 
     override fun start(port: Int) {
-        if (signalingServer != null) return
-        val engine = WebRtcEngine(context)
-        engine.start()
-        val server = WebRtcHttpServer(port = port, webRtcSessionGateway = engine)
-        server.start()
+        val existingEngine = webRtcEngine
+        val existingServer = signalingServer
+
+        if (existingEngine != null && existingServer != null) {
+            if (currentPort == port) return
+            // Hot-switch: keep camera/WebRTC engine alive, restart only signaling HTTP server.
+            existingServer.stop()
+            val newServer = WebRtcHttpServer(port = port, webRtcSessionGateway = existingEngine)
+            newServer.start()
+            signalingServer = newServer
+            currentPort = port
+            return
+        }
+
+        val engine = existingEngine ?: WebRtcEngine(context).also { it.start() }
+        val server = WebRtcHttpServer(port = port, webRtcSessionGateway = engine).also { it.start() }
 
         webRtcEngine = engine
         signalingServer = server
+        currentPort = port
     }
 
     override fun stop() {
         signalingServer?.stop()
         signalingServer = null
+        currentPort = null
 
         webRtcEngine?.stop()
         webRtcEngine = null
@@ -36,6 +50,10 @@ class WebRtcStreamingRuntime @Inject constructor(
 
     override fun switchCamera() {
         webRtcEngine?.switchCamera()
+    }
+
+    override fun onAppBackgroundChanged(isInBackground: Boolean) {
+        webRtcEngine?.setForcePortraitMode(isInBackground)
     }
 }
 

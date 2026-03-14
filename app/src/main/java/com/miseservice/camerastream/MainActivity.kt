@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
+import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -26,6 +27,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miseservice.camerastream.ui.screens.AdminScreen
 import com.miseservice.camerastream.ui.theme.CameraStreamTheme
 import com.miseservice.camerastream.presentation.viewmodel.AdminViewModel
+import com.miseservice.camerastream.service.CameraStreamService
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -47,6 +49,27 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        notifyServiceAppState(CameraStreamService.ACTION_APP_FOREGROUND)
+    }
+
+    override fun onStop() {
+        notifyServiceAppState(CameraStreamService.ACTION_APP_BACKGROUND)
+        super.onStop()
+    }
+
+    private fun notifyServiceAppState(action: String) {
+        val intent = Intent(this, CameraStreamService::class.java).apply {
+            this.action = action
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
         }
     }
 }
@@ -80,7 +103,7 @@ private fun MainContent(
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            permissionsToRequest.add(Manifest.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION)
+            permissionsToRequest.add(Manifest.permission.FOREGROUND_SERVICE_CAMERA)
         }
 
         permissionLauncher.launch(permissionsToRequest.toTypedArray())

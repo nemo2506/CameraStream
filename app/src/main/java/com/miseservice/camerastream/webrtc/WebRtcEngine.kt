@@ -1,7 +1,10 @@
 package com.miseservice.camerastream.webrtc
 
 import android.content.Context
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager as AndroidCameraManager
 import android.util.Log
+import android.view.OrientationEventListener
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -29,6 +32,7 @@ class WebRtcEngine(
     context: Context
 ) : WebRtcSessionGateway {
     private val appContext = context.applicationContext
+    private val androidCameraManager = appContext.getSystemService(Context.CAMERA_SERVICE) as AndroidCameraManager
 
     private val eglBase: EglBase = EglBase.create()
     private var peerConnectionFactory: PeerConnectionFactory? = null
@@ -36,8 +40,34 @@ class WebRtcEngine(
     private var videoTrack: VideoTrack? = null
     private var surfaceTextureHelper: SurfaceTextureHelper? = null
     private var videoCapturer: CameraVideoCapturer? = null
+    private var cameraEnumerator: Camera2Enumerator? = null
     private val peerConnections = ConcurrentHashMap<String, PeerConnection>()
     private val sessionCounter = AtomicInteger(0)
+    @Volatile
+    private var currentSensorOrientation = 90
+    @Volatile
+    private var currentLensFacing = CameraCharacteristics.LENS_FACING_FRONT
+    @Volatile
+    private var currentDisplayRotationDegrees = 0
+    @Volatile
+    private var lastForegroundDisplayRotationDegrees = 0
+    @Volatile
+    private var forcePortraitMode = false
+
+    private val orientationListener: OrientationEventListener by lazy {
+        object : OrientationEventListener(appContext) {
+            override fun onOrientationChanged(orientation: Int) {
+                if (orientation == ORIENTATION_UNKNOWN) return
+                currentDisplayRotationDegrees = when {
+                    orientation <= 45 || orientation > 315 -> 0
+                    orientation in 46..135 -> 270
+                    orientation in 136..225 -> 180
+                    else -> 90
+                }
+                applyCurrentFrameRotation()
+            }
+        }
+    }
 
     companion object {
         private const val TAG = "WebRtcEngine"
@@ -53,6 +83,10 @@ class WebRtcEngine(
         if (initialized.getAndSet(true)) return
         initializeFactory()
         startVideoCapture()
+        if (orientationListener.canDetectOrientation()) {
+            orientationListener.enable()
+            applyCurrentFrameRotation()
+        }
     }
 
     fun stop() {
@@ -70,6 +104,7 @@ class WebRtcEngine(
         }
         videoCapturer?.dispose()
         videoCapturer = null
+        cameraEnumerator = null
 
         surfaceTextureHelper?.dispose()
         surfaceTextureHelper = null
@@ -83,6 +118,8 @@ class WebRtcEngine(
         peerConnectionFactory?.dispose()
         peerConnectionFactory = null
 
+        orientationListener.disable()
+
         eglBase.release()
         initialized.set(false)
     }
@@ -92,12 +129,26 @@ class WebRtcEngine(
         capturer.switchCamera(object : CameraVideoCapturer.CameraSwitchHandler {
             override fun onCameraSwitchDone(isFrontCamera: Boolean) {
                 preferFrontCamera = isFrontCamera
+                refreshSelectedCameraCharacteristics(isFrontCamera)
+                applyCurrentFrameRotation()
             }
 
             override fun onCameraSwitchError(errorDescription: String?) {
                 // Keep previous state when switch fails.
             }
         })
+    }
+
+    fun setForcePortraitMode(enabled: Boolean) {
+        if (enabled && !forcePortraitMode) {
+            // Save last known display orientation before forcing portrait in background.
+            lastForegroundDisplayRotationDegrees = currentDisplayRotationDegrees
+        } else if (!enabled && forcePortraitMode) {
+            // Restore previous portrait/landscape state on return to foreground.
+            currentDisplayRotationDegrees = lastForegroundDisplayRotationDegrees
+        }
+        forcePortraitMode = enabled
+        applyCurrentFrameRotation()
     }
 
     override suspend fun createAnswer(offerSdp: String): String = withContext(Dispatchers.Default) {
@@ -209,13 +260,16 @@ class WebRtcEngine(
     private fun startVideoCapture() {
         val factory = peerConnectionFactory ?: error("PeerConnectionFactory non initialisee")
         val enumerator = Camera2Enumerator(appContext)
+        cameraEnumerator = enumerator
         val selected = selectCamera(enumerator)
             ?: error("Aucune camera compatible WebRTC")
+        updateCameraCharacteristics(selected)
 
         val capturer = enumerator.createCapturer(selected, null)
             ?: error("Impossible de creer le capturer WebRTC")
 
         surfaceTextureHelper = SurfaceTextureHelper.create("WebRtcCaptureThread", eglBase.eglBaseContext)
+        applyCurrentFrameRotation()
         videoSource = factory.createVideoSource(false)
         capturer.initialize(surfaceTextureHelper, appContext, videoSource?.capturerObserver)
         capturer.startCapture(1280, 720, 30)
@@ -223,6 +277,37 @@ class WebRtcEngine(
         videoTrack = factory.createVideoTrack("camera-video-track", videoSource)
         videoTrack?.setEnabled(true)
         videoCapturer = capturer
+    }
+
+    private fun refreshSelectedCameraCharacteristics(isFrontCamera: Boolean) {
+        val enumerator = cameraEnumerator ?: return
+        val cameraId = if (isFrontCamera) {
+            enumerator.deviceNames.firstOrNull { enumerator.isFrontFacing(it) }
+        } else {
+            enumerator.deviceNames.firstOrNull { enumerator.isBackFacing(it) }
+        } ?: return
+        updateCameraCharacteristics(cameraId)
+    }
+
+    private fun updateCameraCharacteristics(cameraId: String) {
+        try {
+            val characteristics = androidCameraManager.getCameraCharacteristics(cameraId)
+            currentSensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
+            currentLensFacing = characteristics.get(CameraCharacteristics.LENS_FACING)
+                ?: CameraCharacteristics.LENS_FACING_FRONT
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to read camera characteristics for $cameraId: ${e.message}")
+        }
+    }
+
+    private fun applyCurrentFrameRotation() {
+        val effectiveDisplayRotation = if (forcePortraitMode) 0 else currentDisplayRotationDegrees
+        val rotationDegrees = if (currentLensFacing == CameraCharacteristics.LENS_FACING_FRONT) {
+            (currentSensorOrientation + effectiveDisplayRotation) % 360
+        } else {
+            (currentSensorOrientation - effectiveDisplayRotation + 360) % 360
+        }
+        surfaceTextureHelper?.setFrameRotation(rotationDegrees)
     }
 
     private fun selectCamera(enumerator: Camera2Enumerator): String? {
