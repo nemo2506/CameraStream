@@ -31,6 +31,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -71,6 +72,13 @@ fun AdminScreen(viewModel: AdminViewModel, modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
+        if (!uiState.ipChangeNotice.isNullOrBlank()) {
+            IpChangeNoticeCard(
+                message = uiState.ipChangeNotice,
+                onDismiss = { viewModel.dismissIpChangeNotice() }
+            )
+        }
+
         StatusCard(isStreaming = uiState.isStreaming)
 
         ControlButtonsSection(
@@ -105,6 +113,38 @@ fun AdminScreen(viewModel: AdminViewModel, modifier: Modifier = Modifier) {
         )
 
         Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun IpChangeNoticeCard(
+    message: String?,
+    onDismiss: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            EmojiText(
+                emoji = "📢",
+                label = message.orEmpty(),
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = onDismiss) {
+                Text("Fermer")
+            }
+        }
     }
 }
 

@@ -10,8 +10,11 @@ import com.miseservice.camerastream.data.local.CameraStreamDatabase
 import com.miseservice.camerastream.data.repository.AdminSettingsRepository
 import com.miseservice.camerastream.service.CameraStreamService
 import com.miseservice.camerastream.utils.NetworkUtils
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class AdminUiState(
@@ -22,6 +25,7 @@ data class AdminUiState(
     val statusUrl: String? = null,
     val isWifiConnected: Boolean = false,
     val wifiNetworkName: String? = null,
+    val ipChangeNotice: String? = null,
     val isWakeLockActive: Boolean = false,
     val isLoading: Boolean = true,
     val errorMessage: String? = null
@@ -37,12 +41,15 @@ class AdminViewModel(context: Context) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AdminUiState())
     val uiState: StateFlow<AdminUiState> = _uiState
+    private var hasCompletedInitialNetworkCheck = false
+    private var ipMonitoringJob: Job? = null
 
     init {
         viewModelScope.launch {
             restorePersistedState()
             initializeNetworkDetection()
         }
+        startIpMonitoring()
     }
 
     /**
@@ -50,6 +57,7 @@ class AdminViewModel(context: Context) : ViewModel() {
      */
     private suspend fun initializeNetworkDetection() {
         try {
+            val previousIpAddress = _uiState.value.localIpAddress
             val isWifiConnected = NetworkUtils.isWifiConnected(appContext)
 
             if (!isWifiConnected) {
@@ -60,6 +68,7 @@ class AdminViewModel(context: Context) : ViewModel() {
                         isLoading = false
                     )
                 )
+                hasCompletedInitialNetworkCheck = true
                 return
             }
 
@@ -69,6 +78,10 @@ class AdminViewModel(context: Context) : ViewModel() {
             val wifiNetworkName = NetworkUtils.getWifiNetworkName(appContext)
 
             if (ipAddress != null) {
+                val showIpChangeNotice = hasCompletedInitialNetworkCheck &&
+                    !previousIpAddress.isNullOrBlank() &&
+                    previousIpAddress != ipAddress
+
                 updateStateAndPersist(
                     _uiState.value.copy(
                         localIpAddress = ipAddress,
@@ -76,10 +89,16 @@ class AdminViewModel(context: Context) : ViewModel() {
                         statusUrl = statusUrl,
                         isWifiConnected = true,
                         wifiNetworkName = wifiNetworkName,
+                        ipChangeNotice = if (showIpChangeNotice) {
+                            "IP locale changée : $previousIpAddress -> $ipAddress"
+                        } else {
+                            _uiState.value.ipChangeNotice
+                        },
                         isLoading = false,
                         errorMessage = null
                     )
                 )
+                hasCompletedInitialNetworkCheck = true
             } else {
                 updateStateAndPersist(
                     _uiState.value.copy(
@@ -88,6 +107,7 @@ class AdminViewModel(context: Context) : ViewModel() {
                         isLoading = false
                     )
                 )
+                hasCompletedInitialNetworkCheck = true
             }
         } catch (e: Exception) {
             updateStateAndPersist(
@@ -96,6 +116,7 @@ class AdminViewModel(context: Context) : ViewModel() {
                     isLoading = false
                 )
             )
+            hasCompletedInitialNetworkCheck = true
         }
     }
 
@@ -107,6 +128,10 @@ class AdminViewModel(context: Context) : ViewModel() {
         viewModelScope.launch {
             initializeNetworkDetection()
         }
+    }
+
+    fun dismissIpChangeNotice() {
+        _uiState.value = _uiState.value.copy(ipChangeNotice = null)
     }
 
     fun startStreaming() {
@@ -179,8 +204,19 @@ class AdminViewModel(context: Context) : ViewModel() {
     }
 
     private suspend fun updateStateAndPersist(newState: AdminUiState) {
+        if (_uiState.value == newState) return
         _uiState.value = newState
         repository.save(newState.toEntity())
+    }
+
+    private fun startIpMonitoring() {
+        ipMonitoringJob?.cancel()
+        ipMonitoringJob = viewModelScope.launch {
+            while (isActive) {
+                delay(10_000)
+                initializeNetworkDetection()
+            }
+        }
     }
 
     private fun AdminUiState.toEntity(): AdminSettingsEntity {
@@ -190,6 +226,11 @@ class AdminViewModel(context: Context) : ViewModel() {
             localIpAddress = localIpAddress,
             isWakeLockActive = isWakeLockActive
         )
+    }
+
+    override fun onCleared() {
+        ipMonitoringJob?.cancel()
+        super.onCleared()
     }
 }
 
