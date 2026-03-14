@@ -497,7 +497,7 @@ private fun WakeLockCard(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = "⚡ Mode veille",
+                    text = "⚡ Mode veille écran",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -505,8 +505,8 @@ private fun WakeLockCard(
                 Text(
                     text = when {
                         !isStreaming -> "Démarrez le streaming pour contrôler la veille"
-                        isWakeLockActive -> "Veille désactivée"
-                        else -> "Veille activée"
+                        isWakeLockActive -> "Écran maintenu allumé"
+                        else -> "L'écran peut s'éteindre (streaming continu)"
                     },
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

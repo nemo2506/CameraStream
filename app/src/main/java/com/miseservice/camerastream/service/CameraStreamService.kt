@@ -24,7 +24,10 @@ import kotlinx.coroutines.launch
 class CameraStreamService : Service() {
     private var cameraManager: CameraManager? = null
     private var httpServer: StreamingHttpServer? = null
-    private var wakeLock: PowerManager.WakeLock? = null
+    // WakeLock CPU : maintient le CPU actif pour les capteurs d'orientation
+    private var cpuWakeLock: PowerManager.WakeLock? = null
+    // WakeLock écran : contrôlé par le bouton utilisateur
+    private var screenWakeLock: PowerManager.WakeLock? = null
     private val scope = CoroutineScope(Dispatchers.Main + Job())
 
     companion object {
@@ -76,9 +79,10 @@ class CameraStreamService : Service() {
                 val notification = createNotification("Streaming actif")
                 startForeground(NOTIFICATION_ID, notification)
 
-                // ✅ N'pas acquérir automatiquement le WakeLock
-                // L'utilisateur contrôle cela via le bouton toggle
-                android.util.Log.d("CameraStreamService", "Streaming started (WakeLock not auto-acquired)")
+                // Acquérir automatiquement le WakeLock CPU pour maintenir
+                // les capteurs actifs (orientation, gyroscope) même écran éteint
+                acquireWakeLock()
+                android.util.Log.d("CameraStreamService", "Streaming started (WakeLock auto-acquired)")
             } catch (e: Exception) {
                 e.printStackTrace()
                 android.util.Log.e("CameraStreamService", "Error starting streaming: ${e.message}", e)
@@ -116,51 +120,81 @@ class CameraStreamService : Service() {
     private fun setWakeLockEnabled(enabled: Boolean) {
         try {
             if (enabled) {
-                android.util.Log.d("CameraStreamService", "Setting WakeLock: ON")
-                acquireWakeLock()
+                android.util.Log.d("CameraStreamService", "Setting Screen WakeLock: ON")
+                acquireScreenWakeLock()
             } else {
-                android.util.Log.d("CameraStreamService", "Setting WakeLock: OFF")
-                releaseWakeLock()
+                android.util.Log.d("CameraStreamService", "Setting Screen WakeLock: OFF")
+                releaseScreenWakeLock()
             }
         } catch (e: Exception) {
             android.util.Log.e("CameraStreamService", "Error setting WakeLock: ${e.message}", e)
         }
     }
 
+    /** Maintient le CPU actif (et les capteurs d'orientation) même écran éteint */
     private fun acquireWakeLock() {
         try {
-            if (wakeLock?.isHeld == true) {
-                android.util.Log.d("CameraStreamService", "WakeLock already held")
-                return
-            }
-
-            if (wakeLock == null) {
-                val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-                wakeLock = powerManager.newWakeLock(
+            if (cpuWakeLock?.isHeld == true) return
+            if (cpuWakeLock == null) {
+                val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                cpuWakeLock = pm.newWakeLock(
                     PowerManager.PARTIAL_WAKE_LOCK,
-                    "CameraStream:WakeLock"
-                ).apply {
-                    setReferenceCounted(false)
-                }
+                    "CameraStream:CpuWakeLock"
+                ).apply { setReferenceCounted(false) }
             }
-
-            wakeLock?.acquire()
-            android.util.Log.d("CameraStreamService", "WakeLock acquired: ${wakeLock?.isHeld}")
+            cpuWakeLock?.acquire()
+            android.util.Log.d("CameraStreamService", "CPU WakeLock acquired: ${cpuWakeLock?.isHeld}")
         } catch (e: Exception) {
-            android.util.Log.e("CameraStreamService", "Error acquiring WakeLock: ${e.message}", e)
+            android.util.Log.e("CameraStreamService", "Error acquiring CPU WakeLock: ${e.message}", e)
         }
     }
 
     private fun releaseWakeLock() {
         try {
-            if (wakeLock?.isHeld == true) {
-                wakeLock?.release()
-                android.util.Log.d("CameraStreamService", "WakeLock released")
+            if (cpuWakeLock?.isHeld == true) {
+                cpuWakeLock?.release()
+                android.util.Log.d("CameraStreamService", "CPU WakeLock released")
             }
-            wakeLock = null
+            cpuWakeLock = null
+            releaseScreenWakeLock()
         } catch (e: Exception) {
-            android.util.Log.e("CameraStreamService", "Error releasing WakeLock: ${e.message}", e)
-            wakeLock = null
+            android.util.Log.e("CameraStreamService", "Error releasing CPU WakeLock: ${e.message}", e)
+            cpuWakeLock = null
+        }
+    }
+
+    /** Maintient l'écran allumé (contrôlé par le bouton utilisateur) */
+    @Suppress("DEPRECATION")
+    private fun acquireScreenWakeLock() {
+        try {
+            if (screenWakeLock?.isHeld == true) {
+                android.util.Log.d("CameraStreamService", "Screen WakeLock already held")
+                return
+            }
+            if (screenWakeLock == null) {
+                val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                screenWakeLock = pm.newWakeLock(
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                    "CameraStream:ScreenWakeLock"
+                ).apply { setReferenceCounted(false) }
+            }
+            screenWakeLock?.acquire()
+            android.util.Log.d("CameraStreamService", "Screen WakeLock acquired: ${screenWakeLock?.isHeld}")
+        } catch (e: Exception) {
+            android.util.Log.e("CameraStreamService", "Error acquiring Screen WakeLock: ${e.message}", e)
+        }
+    }
+
+    private fun releaseScreenWakeLock() {
+        try {
+            if (screenWakeLock?.isHeld == true) {
+                screenWakeLock?.release()
+                android.util.Log.d("CameraStreamService", "Screen WakeLock released")
+            }
+            screenWakeLock = null
+        } catch (e: Exception) {
+            android.util.Log.e("CameraStreamService", "Error releasing Screen WakeLock: ${e.message}", e)
+            screenWakeLock = null
         }
     }
 

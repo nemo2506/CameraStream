@@ -7,13 +7,13 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager as AndroidCameraManager
 import android.hardware.camera2.params.StreamConfigurationMap
-import android.hardware.display.DisplayManager
 import android.media.Image
 import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
 import android.util.Size
+import android.view.OrientationEventListener
 import android.view.Surface
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,6 +33,31 @@ class CameraManager(
     private var currentSensorOrientation = 90
     private var currentLensFacing = CameraCharacteristics.LENS_FACING_FRONT
     private var selectedResolution = Size(1280, 720)
+
+    // Rotation physique courante du téléphone (degrés, équivalent Surface.ROTATION_*)
+    // Déterminée par OrientationEventListener (capteur, fiable même écran éteint)
+    @Volatile private var currentDisplayRotationDegrees = 0
+
+    private val orientationEventListener: OrientationEventListener by lazy {
+        object : OrientationEventListener(context) {
+            override fun onOrientationChanged(orientation: Int) {
+                if (orientation == ORIENTATION_UNKNOWN) return
+                // Convertit l'angle du capteur (0-359) en rotation d'écran équivalente
+                // Formule : displayRotation = (360 - orientation) % 360
+                // Portrait      orientation~0   → displayRotation=0
+                // Landscape CW  orientation~270 → displayRotation=90
+                // Upside-down   orientation~180 → displayRotation=180
+                // Landscape CCW orientation~90  → displayRotation=270
+                val snapped = when {
+                    orientation <= 45 || orientation > 315 -> 0
+                    orientation in 46..135   -> 270
+                    orientation in 136..225  -> 180
+                    else                     -> 90
+                }
+                currentDisplayRotationDegrees = snapped
+            }
+        }
+    }
 
     companion object {
         private const val MAX_WIDTH       = 3840
@@ -112,6 +137,14 @@ class CameraManager(
     @SuppressLint("MissingPermission")
     fun initializeCamera() {
         try {
+            // Démarrer le suivi d'orientation physique (fonctionne même écran éteint)
+            if (orientationEventListener.canDetectOrientation()) {
+                orientationEventListener.enable()
+                Log.d("CameraManager", "OrientationEventListener activé")
+            } else {
+                Log.w("CameraManager", "Détection d'orientation non disponible sur cet appareil")
+            }
+
             handlerThread = HandlerThread("CameraThread").apply {
                 start()
                 handler = Handler(looper)
@@ -217,7 +250,9 @@ class CameraManager(
     fun isFrontCamera(): Boolean = isUsingFrontCamera
 
     private fun calculateJpegRotationDegrees(): Int {
-        val displayRotationDegrees = getDisplayRotationDegrees()
+        // Utilise la valeur du capteur (OrientationEventListener),
+        // fiable même quand l'écran est éteint ou en veille
+        val displayRotationDegrees = currentDisplayRotationDegrees
         val sensorOrientation = currentSensorOrientation
 
         return if (currentLensFacing == CameraCharacteristics.LENS_FACING_FRONT) {
@@ -227,24 +262,6 @@ class CameraManager(
         }
     }
 
-    private fun getDisplayRotationDegrees(): Int {
-        return try {
-            val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
-            val rotation = displayManager.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.rotation
-                ?: Surface.ROTATION_0
-
-            when (rotation) {
-                Surface.ROTATION_0 -> 0
-                Surface.ROTATION_90 -> 90
-                Surface.ROTATION_180 -> 180
-                Surface.ROTATION_270 -> 270
-                else -> 0
-            }
-        } catch (e: Exception) {
-            Log.w("CameraManager", "Cannot read display rotation, fallback to 0: ${e.message}")
-            0
-        }
-    }
 
     private fun imageToNV21(image: Image): ByteArray {
         val planes = image.planes
@@ -263,6 +280,9 @@ class CameraManager(
 
     fun release() {
         try {
+            // Arrêter le suivi d'orientation
+            orientationEventListener.disable()
+
             captureSessions.forEach {
                 try {
                     it.close()
