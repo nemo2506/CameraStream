@@ -146,6 +146,54 @@ Exemple de fichier Apache (`/etc/apache2/sites-available/camerastream.conf`) :
 </VirtualHost>
 ```
 
+### Commandes Apache (adaptées à l'exemple) ⚙️
+
+> Visuel rapide: `modules` -> `site` -> `test config` -> `reload` -> `verification`
+
+1. **Activer les modules nécessaires**
+
+```bash
+sudo a2enmod proxy
+sudo a2enmod proxy_http
+sudo a2enmod rewrite
+sudo a2enmod headers
+sudo a2enmod ssl
+```
+
+2. **Activer le site de l'exemple**
+
+```bash
+sudo a2ensite camerastream.conf
+```
+
+3. **Tester la configuration Apache**
+
+```bash
+sudo apache2ctl configtest
+```
+
+4. **Recharger Apache (sans couper le service)**
+
+```bash
+sudo systemctl reload apache2
+```
+
+5. **Verifier le proxy HTTPS**
+
+```bash
+curl -vk https://cam.exemple.com/status
+curl -vk https://cam.exemple.com/viewer
+```
+
+6. **(Optionnel) Verifier le preflight CORS**
+
+```bash
+curl -vk -X OPTIONS https://cam.exemple.com/api/webrtc/offer \
+  -H "Origin: https://cam.exemple.com" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: content-type"
+```
+
 ## Build local 🛠️
 
 ```powershell
