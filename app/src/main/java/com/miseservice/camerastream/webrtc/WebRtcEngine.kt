@@ -9,6 +9,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import org.webrtc.CameraEnumerationAndroid
 import org.webrtc.Camera2Enumerator
 import org.webrtc.CameraVideoCapturer
 import org.webrtc.DefaultVideoDecoderFactory
@@ -41,6 +42,7 @@ class WebRtcEngine(
     private var surfaceTextureHelper: SurfaceTextureHelper? = null
     private var videoCapturer: CameraVideoCapturer? = null
     private var cameraEnumerator: Camera2Enumerator? = null
+    private var currentCameraId: String? = null
     private val peerConnections = ConcurrentHashMap<String, PeerConnection>()
     private val sessionCounter = AtomicInteger(0)
     @Volatile
@@ -53,6 +55,12 @@ class WebRtcEngine(
     private var lastForegroundDisplayRotationDegrees = 0
     @Volatile
     private var forcePortraitMode = false
+    @Volatile
+    private var currentCaptureWidth = 1280
+    @Volatile
+    private var currentCaptureHeight = 720
+    @Volatile
+    private var currentCaptureFps = 30
 
     private val orientationListener: OrientationEventListener by lazy {
         object : OrientationEventListener(appContext) {
@@ -130,6 +138,7 @@ class WebRtcEngine(
             override fun onCameraSwitchDone(isFrontCamera: Boolean) {
                 preferFrontCamera = isFrontCamera
                 refreshSelectedCameraCharacteristics(isFrontCamera)
+                reconfigureCaptureForSelectedCamera()
                 applyCurrentFrameRotation()
             }
 
@@ -263,7 +272,9 @@ class WebRtcEngine(
         cameraEnumerator = enumerator
         val selected = selectCamera(enumerator)
             ?: error("Aucune camera compatible WebRTC")
+        currentCameraId = selected
         updateCameraCharacteristics(selected)
+        val captureFormat = selectBestCaptureFormat(enumerator, selected)
 
         val capturer = enumerator.createCapturer(selected, null)
             ?: error("Impossible de creer le capturer WebRTC")
@@ -272,7 +283,14 @@ class WebRtcEngine(
         applyCurrentFrameRotation()
         videoSource = factory.createVideoSource(false)
         capturer.initialize(surfaceTextureHelper, appContext, videoSource?.capturerObserver)
-        capturer.startCapture(1280, 720, 30)
+        currentCaptureWidth = captureFormat.width
+        currentCaptureHeight = captureFormat.height
+        currentCaptureFps = captureFormat.fps
+        Log.i(
+            TAG,
+            "Starting capture on $selected at ${captureFormat.width}x${captureFormat.height}@${captureFormat.fps}fps"
+        )
+        capturer.startCapture(captureFormat.width, captureFormat.height, captureFormat.fps)
 
         videoTrack = factory.createVideoTrack("camera-video-track", videoSource)
         videoTrack?.setEnabled(true)
@@ -286,7 +304,80 @@ class WebRtcEngine(
         } else {
             enumerator.deviceNames.firstOrNull { enumerator.isBackFacing(it) }
         } ?: return
+        currentCameraId = cameraId
         updateCameraCharacteristics(cameraId)
+    }
+
+    private fun reconfigureCaptureForSelectedCamera() {
+        val enumerator = cameraEnumerator ?: return
+        val capturer = videoCapturer ?: return
+        val cameraId = currentCameraId ?: return
+        val captureFormat = selectBestCaptureFormat(enumerator, cameraId)
+
+        if (
+            captureFormat.width == currentCaptureWidth &&
+            captureFormat.height == currentCaptureHeight &&
+            captureFormat.fps == currentCaptureFps
+        ) {
+            return
+        }
+
+        try {
+            capturer.stopCapture()
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to stop capture before reconfigure: ${e.message}")
+        }
+
+        try {
+            currentCaptureWidth = captureFormat.width
+            currentCaptureHeight = captureFormat.height
+            currentCaptureFps = captureFormat.fps
+            Log.i(
+                TAG,
+                "Reconfiguring capture on $cameraId to ${captureFormat.width}x${captureFormat.height}@${captureFormat.fps}fps"
+            )
+            capturer.startCapture(captureFormat.width, captureFormat.height, captureFormat.fps)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to restart capture on new camera format: ${e.message}", e)
+        }
+    }
+
+    private data class CaptureConfig(
+        val width: Int,
+        val height: Int,
+        val fps: Int
+    )
+
+    private fun selectBestCaptureFormat(
+        enumerator: Camera2Enumerator,
+        cameraId: String
+    ): CaptureConfig {
+        val formats = try {
+            enumerator.getSupportedFormats(cameraId).orEmpty()
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to query supported formats for $cameraId: ${e.message}")
+            emptyList<CameraEnumerationAndroid.CaptureFormat>()
+        }
+
+        val best = formats.maxWithOrNull(
+            compareBy<CameraEnumerationAndroid.CaptureFormat> { it.width.toLong() * it.height.toLong() }
+                .thenBy { it.framerate.max }
+        )
+
+        if (best == null) {
+            return CaptureConfig(width = 1280, height = 720, fps = 30)
+        }
+
+        val fps = (best.framerate.max / 1000)
+            .takeIf { it > 0 }
+            ?.coerceAtMost(30)
+            ?: 30
+
+        return CaptureConfig(
+            width = best.width,
+            height = best.height,
+            fps = fps
+        )
     }
 
     private fun updateCameraCharacteristics(cameraId: String) {
