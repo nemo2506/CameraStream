@@ -1,9 +1,11 @@
 package com.miseservice.camerastream.webrtc
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.webrtc.Camera2Enumerator
 import org.webrtc.CameraVideoCapturer
 import org.webrtc.DefaultVideoDecoderFactory
@@ -19,7 +21,9 @@ import org.webrtc.SdpObserver
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 class WebRtcEngine(
     context: Context
@@ -32,7 +36,14 @@ class WebRtcEngine(
     private var videoTrack: VideoTrack? = null
     private var surfaceTextureHelper: SurfaceTextureHelper? = null
     private var videoCapturer: CameraVideoCapturer? = null
-    private var peerConnection: PeerConnection? = null
+    private val peerConnections = ConcurrentHashMap<String, PeerConnection>()
+    private val sessionCounter = AtomicInteger(0)
+
+    companion object {
+        private const val TAG = "WebRtcEngine"
+    }
+
+    override fun activeSessionCount(): Int = peerConnections.size
 
     private val initialized = AtomicBoolean(false)
     @Volatile
@@ -45,8 +56,13 @@ class WebRtcEngine(
     }
 
     fun stop() {
-        peerConnection?.close()
-        peerConnection = null
+        peerConnections.values.forEach { connection ->
+            try {
+                connection.close()
+            } catch (_: Exception) {
+            }
+        }
+        peerConnections.clear()
 
         try {
             videoCapturer?.stopCapture()
@@ -100,12 +116,22 @@ class WebRtcEngine(
             continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
         }
 
-        peerConnection?.close()
-        peerConnection = factory.createPeerConnection(
+        val sessionId = "viewer-${sessionCounter.incrementAndGet()}"
+        lateinit var connection: PeerConnection
+
+        connection = factory.createPeerConnection(
             rtcConfig,
             object : PeerConnection.Observer {
                 override fun onSignalingChange(state: PeerConnection.SignalingState?) = Unit
-                override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) = Unit
+                override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {
+                    if (
+                        state == PeerConnection.IceConnectionState.FAILED ||
+                        state == PeerConnection.IceConnectionState.DISCONNECTED ||
+                        state == PeerConnection.IceConnectionState.CLOSED
+                    ) {
+                        removeAndCloseSession(sessionId)
+                    }
+                }
                 override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit
                 override fun onIceGatheringChange(state: PeerConnection.IceGatheringState?) {
                     if (state == PeerConnection.IceGatheringState.COMPLETE && !gatherComplete.isCompleted) {
@@ -123,27 +149,35 @@ class WebRtcEngine(
             }
         ) ?: error("Impossible de creer PeerConnection")
 
-        peerConnection?.addTrack(currentTrack, listOf("camera-stream"))
+        peerConnections[sessionId] = connection
+        Log.i(TAG, "Session $sessionId started — active viewers: ${peerConnections.size}")
+        connection.addTrack(currentTrack, listOf("camera-stream"))
 
         val remoteOffer = SessionDescription(SessionDescription.Type.OFFER, offerSdp)
         setSessionDescription(
-            setter = { observer, description -> peerConnection?.setRemoteDescription(observer, description) },
+            setter = { observer, description -> connection.setRemoteDescription(observer, description) },
             description = remoteOffer
         )
 
-        val answer = createAnswerDescription(peerConnection)
+        val answer = createAnswerDescription(connection)
         setSessionDescription(
-            setter = { observer, description -> peerConnection?.setLocalDescription(observer, description) },
+            setter = { observer, description -> connection.setLocalDescription(observer, description) },
             description = answer
         )
 
-        if (!gatherComplete.isCompleted) {
-            gatherComplete.complete(Unit)
+        // Non-trickle ICE: wait briefly so localDescription includes ICE candidates.
+        withTimeoutOrNull(3000) {
+            gatherComplete.await()
         }
-        gatherComplete.await()
 
-        val local = peerConnection?.localDescription
+        val local = connection.localDescription
         local?.description ?: answer.description
+    }
+
+    private fun removeAndCloseSession(sessionId: String) {
+        val existing = peerConnections.remove(sessionId) ?: return
+        try { existing.close() } catch (_: Exception) {}
+        Log.i(TAG, "Session $sessionId removed — active viewers: ${peerConnections.size}")
     }
 
     private fun ensureStarted() {
