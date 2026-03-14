@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.CameraFront
 import androidx.compose.material.icons.filled.CameraRear
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Button
@@ -39,10 +40,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -53,17 +56,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.input.KeyboardType
 import com.miseservice.camerastream.presentation.viewmodel.AdminViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun AdminScreen(viewModel: AdminViewModel, modifier: Modifier = Modifier) {
     val uiState by viewModel.uiState.collectAsState()
+    val scrollState = rememberScrollState()
+    val focusManager = LocalFocusManager.current
+    val coroutineScope = rememberCoroutineScope()
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
@@ -103,7 +110,13 @@ fun AdminScreen(viewModel: AdminViewModel, modifier: Modifier = Modifier) {
         PortEditorCard(
             currentPort = uiState.streamingPort,
             isStreaming = uiState.isStreaming,
-            onPortChanged = { viewModel.setStreamingPort(it) }
+            onPortChanged = {
+                viewModel.setStreamingPort(it)
+                focusManager.clearFocus(force = true)
+                coroutineScope.launch {
+                    scrollState.animateScrollTo(0)
+                }
+            }
         )
 
         CameraSelectionCard(
@@ -155,33 +168,41 @@ private fun PortEditorCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            OutlinedTextField(
-                value = input,
-                onValueChange = { input = it.filter(Char::isDigit).take(5) },
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Port (1-65535)") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                supportingText = {
-                    Text(
-                        if (isStreaming) {
-                            "Le nouveau port sera pris en compte au prochain démarrage du streaming."
-                        } else {
-                            "Port actuel: $currentPort"
-                        }
-                    )
-                },
-                isError = input.isNotBlank() && !isValidPort
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Button(
-                onClick = { onPortChanged(input) },
-                enabled = isValidPort && isChanged,
-                shape = RoundedCornerShape(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Appliquer le port")
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it.filter(Char::isDigit).take(5) },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("Port (1-65535)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    isError = input.isNotBlank() && !isValidPort
+                )
+
+                Button(
+                    onClick = { onPortChanged(input) },
+                    enabled = isValidPort && isChanged,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(56.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Save,
+                        contentDescription = "Sauvegarder le port"
+                    )
+                }
+            }
+
+            if (isStreaming) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Port appliqué en direct",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

@@ -52,7 +52,8 @@ class AdminViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            restorePersistedState()
+            val saved = restorePersistedState()
+            ensureStreamingRuntimeState(saved)
             initializeNetworkDetection()
         }
         startIpMonitoring()
@@ -138,11 +139,20 @@ class AdminViewModel @Inject constructor(
     fun setStreamingPort(rawPort: String) {
         val parsed = rawPort.toIntOrNull()
         val validatedPort = parsed?.takeIf { it in 1..65535 } ?: return
-        if (validatedPort == _uiState.value.streamingPort) return
+        val currentState = _uiState.value
+        if (validatedPort == currentState.streamingPort) return
 
-        _uiState.value = _uiState.value.copy(streamingPort = validatedPort)
+        _uiState.value = currentState.copy(streamingPort = validatedPort, isLoading = true)
         persistCurrentState()
-        refreshNetworkDetection()
+
+        viewModelScope.launch {
+            if (currentState.isStreaming) {
+                // Service handles in-place restart if needed when port changes.
+                startStreamingUseCase(validatedPort)
+                delay(300)
+            }
+            initializeNetworkDetection()
+        }
     }
 
     fun stopStreaming() {
@@ -174,7 +184,7 @@ class AdminViewModel @Inject constructor(
         copyToClipboardUseCase("Streaming URL", url)
     }
 
-    private suspend fun restorePersistedState() {
+    private suspend fun restorePersistedState(): AdminSettings {
         val saved = loadAdminSettingsUseCase()
         _uiState.value = _uiState.value.copy(
             isStreaming = saved.isStreaming,
@@ -184,6 +194,13 @@ class AdminViewModel @Inject constructor(
             isWakeLockActive = saved.isWakeLockActive,
             isLoading = true
         )
+        return saved
+    }
+
+    private fun ensureStreamingRuntimeState(saved: AdminSettings) {
+        if (!saved.isStreaming) return
+        // Re-issue start command on app reopen so service/server is back if Android stopped it.
+        startStreamingUseCase(saved.streamingPort)
     }
 
     private fun persistCurrentState() {
