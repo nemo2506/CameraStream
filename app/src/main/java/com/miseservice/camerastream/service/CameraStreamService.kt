@@ -27,6 +27,7 @@ class CameraStreamService : Service() {
     lateinit var streamingRuntime: StreamingRuntime
 
     private var isStreamingRuntimeStarted = false
+    private var currentStreamingPort: Int = DEFAULT_STREAMING_PORT
     // CPU WakeLock : maintient le CPU et les capteurs d'orientation actifs même écran éteint
     // L'écran est géré par FLAG_KEEP_SCREEN_ON dans MainActivity (pattern Parking)
     private var cpuWakeLock: PowerManager.WakeLock? = null
@@ -35,9 +36,11 @@ class CameraStreamService : Service() {
     companion object {
         private const val NOTIFICATION_CHANNEL_ID = "camera_stream_channel"
         private const val NOTIFICATION_ID = 1
+        private const val DEFAULT_STREAMING_PORT = 8080
         const val ACTION_START = "com.miseservice.camerastream.ACTION_START"
         const val ACTION_STOP = "com.miseservice.camerastream.ACTION_STOP"
         const val ACTION_SWITCH_CAMERA = "com.miseservice.camerastream.ACTION_SWITCH_CAMERA"
+        const val EXTRA_STREAMING_PORT = "extra_streaming_port"
     }
 
     override fun onCreate() {
@@ -47,7 +50,11 @@ class CameraStreamService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START -> startStreaming()
+            ACTION_START -> {
+                val requestedPort = intent.getIntExtra(EXTRA_STREAMING_PORT, DEFAULT_STREAMING_PORT)
+                currentStreamingPort = if (requestedPort in 1..65535) requestedPort else DEFAULT_STREAMING_PORT
+                startStreaming()
+            }
             ACTION_STOP -> stopStreaming()
             ACTION_SWITCH_CAMERA -> switchCamera()
             else -> startStreaming()
@@ -61,7 +68,7 @@ class CameraStreamService : Service() {
 
         scope.launch(Dispatchers.Default) {
             try {
-                streamingRuntime.start()
+                streamingRuntime.start(currentStreamingPort)
                 isStreamingRuntimeStarted = true
 
                 // Start foreground notification
@@ -151,7 +158,7 @@ class CameraStreamService : Service() {
 
     private fun createNotification(contentText: String): Notification {
         val ip = NetworkUtils.getLocalIpAddress(this)
-        val displayText = if (ip != null) "WebRTC: http://$ip:8080/viewer" else contentText
+        val displayText = if (ip != null) "WebRTC: http://$ip:$currentStreamingPort/viewer" else contentText
 
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle("Streaming Caméra")

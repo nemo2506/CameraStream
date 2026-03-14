@@ -4,10 +4,12 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [AdminSettingsEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class CameraStreamDatabase : RoomDatabase() {
@@ -24,9 +26,17 @@ abstract class CameraStreamDatabase : RoomDatabase() {
                     CameraStreamDatabase::class.java,
                     "camera_stream.db"
                 )
-                    .fallbackToDestructiveMigration()
+                    .addMigrations(MIGRATION_2_3)
                     .build()
                     .also { instance = it }
+            }
+        }
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE admin_settings ADD COLUMN streamingPort INTEGER NOT NULL DEFAULT 8080"
+                )
             }
         }
     }

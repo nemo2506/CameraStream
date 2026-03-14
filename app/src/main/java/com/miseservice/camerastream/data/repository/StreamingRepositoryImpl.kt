@@ -13,9 +13,10 @@ import javax.inject.Inject
 class StreamingRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context
 ) : StreamingRepository {
-    override fun startStreaming() {
+    override fun startStreaming(port: Int) {
         val intent = Intent(context, CameraStreamService::class.java).apply {
             action = CameraStreamService.ACTION_START
+            putExtra(CameraStreamService.EXTRA_STREAMING_PORT, port)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.startForegroundService(intent)

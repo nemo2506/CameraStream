@@ -12,7 +12,7 @@ import javax.inject.Inject
 class NetworkRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context
 ) : NetworkRepository {
-    override suspend fun fetchNetworkInfo(): NetworkInfo {
+    override suspend fun fetchNetworkInfo(port: Int): NetworkInfo {
         val isWifiConnected = NetworkUtils.isWifiConnected(context)
         if (!isWifiConnected) {
             return NetworkInfoConverter.dtoToDomain(
@@ -31,8 +31,8 @@ class NetworkRepositoryImpl @Inject constructor(
         val dto = NetworkInfoDto(
             isWifiConnected = ipAddress != null,
             localIpAddress = ipAddress,
-            streamingUrl = NetworkUtils.getStreamingUrl(context),
-            statusUrl = NetworkUtils.getStatusUrl(context),
+            streamingUrl = NetworkUtils.getStreamingUrl(context, port),
+            statusUrl = NetworkUtils.getStatusUrl(context, port),
             wifiNetworkName = NetworkUtils.getWifiNetworkName(context),
             errorMessage = if (ipAddress == null) {
                 "Impossible de détecter l'adresse IP. Essayez de reconnecter le WiFi."

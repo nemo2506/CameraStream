@@ -6,6 +6,6 @@ import javax.inject.Inject
 class StartStreamingUseCase @Inject constructor(
     private val repository: StreamingRepository
 ) {
-    operator fun invoke() = repository.startStreaming()
+    operator fun invoke(port: Int) = repository.startStreaming(port)
 }
 

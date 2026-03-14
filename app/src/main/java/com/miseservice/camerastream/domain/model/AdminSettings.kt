@@ -4,6 +4,7 @@ data class AdminSettings(
     val isStreaming: Boolean = false,
     val isFrontCamera: Boolean = true,
     val localIpAddress: String? = null,
-    val isWakeLockActive: Boolean = false
+    val isWakeLockActive: Boolean = false,
+    val streamingPort: Int = 8080
 )
 

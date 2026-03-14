@@ -15,11 +15,11 @@ class WebRtcStreamingRuntime @Inject constructor(
     private var webRtcEngine: WebRtcEngine? = null
     private var signalingServer: WebRtcHttpServer? = null
 
-    override fun start() {
+    override fun start(port: Int) {
         if (signalingServer != null) return
         val engine = WebRtcEngine(context)
         engine.start()
-        val server = WebRtcHttpServer(port = 8080, webRtcSessionGateway = engine)
+        val server = WebRtcHttpServer(port = port, webRtcSessionGateway = engine)
         server.start()
 
         webRtcEngine = engine

@@ -1,7 +1,7 @@
 package com.miseservice.camerastream.data.streaming
 
 interface StreamingRuntime {
-    fun start()
+    fun start(port: Int)
     fun stop()
     fun switchCamera()
 }

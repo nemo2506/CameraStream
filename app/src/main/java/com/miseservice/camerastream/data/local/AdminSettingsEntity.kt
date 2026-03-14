@@ -9,7 +9,8 @@ data class AdminSettingsEntity(
     val isStreaming: Boolean = false,
     val isFrontCamera: Boolean = true,
     val localIpAddress: String? = null,
-    val isWakeLockActive: Boolean = false
+    val isWakeLockActive: Boolean = false,
+    val streamingPort: Int = 8080
 ) {
     companion object {
         const val SINGLETON_ID: Int = 1

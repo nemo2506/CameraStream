@@ -10,7 +10,8 @@ object AdminSettingsConverter {
             isStreaming = entity.isStreaming,
             isFrontCamera = entity.isFrontCamera,
             localIpAddress = entity.localIpAddress,
-            isWakeLockActive = entity.isWakeLockActive
+            isWakeLockActive = entity.isWakeLockActive,
+            streamingPort = entity.streamingPort
         )
     }
 
@@ -19,7 +20,8 @@ object AdminSettingsConverter {
             isStreaming = dto.isStreaming,
             isFrontCamera = dto.isFrontCamera,
             localIpAddress = dto.localIpAddress,
-            isWakeLockActive = dto.isWakeLockActive
+            isWakeLockActive = dto.isWakeLockActive,
+            streamingPort = dto.streamingPort
         )
     }
 
@@ -28,7 +30,8 @@ object AdminSettingsConverter {
             isStreaming = dto.isStreaming,
             isFrontCamera = dto.isFrontCamera,
             localIpAddress = dto.localIpAddress,
-            isWakeLockActive = dto.isWakeLockActive
+            isWakeLockActive = dto.isWakeLockActive,
+            streamingPort = dto.streamingPort
         )
     }
 
@@ -37,7 +40,8 @@ object AdminSettingsConverter {
             isStreaming = domain.isStreaming,
             isFrontCamera = domain.isFrontCamera,
             localIpAddress = domain.localIpAddress,
-            isWakeLockActive = domain.isWakeLockActive
+            isWakeLockActive = domain.isWakeLockActive,
+            streamingPort = domain.streamingPort
         )
     }
 }

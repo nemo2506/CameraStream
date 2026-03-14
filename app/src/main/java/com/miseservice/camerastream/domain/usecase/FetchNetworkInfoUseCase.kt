@@ -7,6 +7,6 @@ import javax.inject.Inject
 class FetchNetworkInfoUseCase @Inject constructor(
     private val repository: NetworkRepository
 ) {
-    suspend operator fun invoke(): NetworkInfo = repository.fetchNetworkInfo()
+    suspend operator fun invoke(port: Int): NetworkInfo = repository.fetchNetworkInfo(port)
 }
 
