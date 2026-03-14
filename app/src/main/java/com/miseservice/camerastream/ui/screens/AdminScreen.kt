@@ -462,11 +462,6 @@ private fun NetworkInfoCard(
                             .padding(end = 8.dp)
                     ) {
                         Text(
-                            text = "🎬 URL de streaming",
-                            fontSize = 12.sp,
-                            color = colorScheme.onSurfaceVariant
-                        )
-                        Text(
                             text = streamingUrl,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
