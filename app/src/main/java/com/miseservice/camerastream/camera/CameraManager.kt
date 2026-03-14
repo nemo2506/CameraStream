@@ -6,12 +6,14 @@ import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager as AndroidCameraManager
+import android.hardware.camera2.params.StreamConfigurationMap
 import android.hardware.display.DisplayManager
 import android.media.Image
 import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
+import android.util.Size
 import android.view.Surface
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +32,40 @@ class CameraManager(
     private var isUsingFrontCamera = true
     private var currentSensorOrientation = 90
     private var currentLensFacing = CameraCharacteristics.LENS_FACING_FRONT
+    private var selectedResolution = Size(1280, 720)
+
+    companion object {
+        private const val MAX_WIDTH       = 3840
+        private const val MAX_HEIGHT      = 2160
+        private const val TARGET_RATIO    = 16.0 / 9.0
+        private const val RATIO_TOLERANCE = 0.1
+    }
+
+    /**
+     * Choisit la meilleure résolution YUV_420_888 disponible :
+     * - exclut les résolutions supérieures à 4K (3840×2160)
+     * - préfère les tailles avec ratio 16/9 (±0.1)
+     * - parmi les candidates, prend la plus grande surface
+     * - repli sur 1280×720 si rien ne convient
+     */
+    private fun pickBestSize(map: StreamConfigurationMap): Size {
+        val sizes = map.getOutputSizes(android.graphics.ImageFormat.YUV_420_888)
+            ?.filter { it.width <= MAX_WIDTH && it.height <= MAX_HEIGHT }
+            ?: return Size(1280, 720)
+
+        val widescreen = sizes.filter { s ->
+            val ratio = s.width.toDouble() / s.height
+            kotlin.math.abs(ratio - TARGET_RATIO) < RATIO_TOLERANCE
+        }
+
+        val candidates = widescreen.ifEmpty { sizes }
+        val best = candidates.maxByOrNull { it.width.toLong() * it.height }
+            ?: return Size(1280, 720)
+
+        Log.d("CameraManager", "Résolutions disponibles : ${sizes.joinToString { "${it.width}x${it.height}" }}")
+        Log.d("CameraManager", "Meilleure résolution sélectionnée : ${best.width}x${best.height}")
+        return best
+    }
 
     private val _latestFrameData = MutableStateFlow<CameraFrame?>(null)
     val latestFrameData: StateFlow<CameraFrame?> = _latestFrameData
@@ -115,14 +151,23 @@ class CameraManager(
             currentLensFacing = selectedCharacteristics.get(CameraCharacteristics.LENS_FACING)
                 ?: CameraCharacteristics.LENS_FACING_FRONT
 
-            // Create ImageReader for preview (use YUV format)
-            imageReader = ImageReader.newInstance(1280, 720, android.graphics.ImageFormat.YUV_420_888, 2)
+            // Détection automatique de la meilleure résolution YUV supportée
+            val streamMap = selectedCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            selectedResolution = if (streamMap != null) pickBestSize(streamMap) else Size(1280, 720)
+
+            // Create ImageReader avec la résolution optimale détectée
+            imageReader = ImageReader.newInstance(
+                selectedResolution.width,
+                selectedResolution.height,
+                android.graphics.ImageFormat.YUV_420_888,
+                2
+            )
             imageReader?.setOnImageAvailableListener(imageAvailableListener, handler)
 
             // Open camera
             cameraManager.openCamera(currentCameraId, cameraDeviceCallback, handler)
 
-            Log.d("CameraManager", "Camera initialization started")
+            Log.d("CameraManager", "Camera initialization started at ${selectedResolution.width}x${selectedResolution.height}")
         } catch (e: Exception) {
             Log.e("CameraManager", "Error initializing camera: ${e.message}", e)
             e.printStackTrace()
