@@ -46,7 +46,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.miseservice.camerastream.viewmodel.AdminViewModel
+import com.miseservice.camerastream.presentation.viewmodel.AdminViewModel
 
 @Composable
 fun AdminScreen(viewModel: AdminViewModel, modifier: Modifier = Modifier) {
@@ -184,7 +184,7 @@ private fun EmojiText(
 
 @Composable
 private fun NetworkDetectionSection(
-    uiState: com.miseservice.camerastream.viewmodel.AdminUiState,
+    uiState: com.miseservice.camerastream.presentation.viewmodel.AdminUiState,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -237,7 +237,7 @@ private fun NetworkDetectionSection(
             } else if (uiState.errorMessage != null) {
                 EmojiText(
                     emoji = "⚠️",
-                    label = uiState.errorMessage.orEmpty(),
+                    label = uiState.errorMessage,
                     fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     fontWeight = FontWeight.Normal,
                     color = MaterialTheme.colorScheme.error,

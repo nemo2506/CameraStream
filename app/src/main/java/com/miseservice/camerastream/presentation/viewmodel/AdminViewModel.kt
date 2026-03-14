@@ -1,21 +1,23 @@
-package com.miseservice.camerastream.viewmodel
+package com.miseservice.camerastream.presentation.viewmodel
 
-import android.content.Context
-import android.content.Intent
-import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.miseservice.camerastream.data.local.AdminSettingsEntity
-import com.miseservice.camerastream.data.local.CameraStreamDatabase
-import com.miseservice.camerastream.data.repository.AdminSettingsRepository
-import com.miseservice.camerastream.service.CameraStreamService
-import com.miseservice.camerastream.utils.NetworkUtils
+import com.miseservice.camerastream.domain.model.AdminSettings
+import com.miseservice.camerastream.domain.usecase.CopyToClipboardUseCase
+import com.miseservice.camerastream.domain.usecase.FetchNetworkInfoUseCase
+import com.miseservice.camerastream.domain.usecase.LoadAdminSettingsUseCase
+import com.miseservice.camerastream.domain.usecase.SaveAdminSettingsUseCase
+import com.miseservice.camerastream.domain.usecase.StartStreamingUseCase
+import com.miseservice.camerastream.domain.usecase.StopStreamingUseCase
+import com.miseservice.camerastream.domain.usecase.SwitchCameraUseCase
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 data class AdminUiState(
     val isStreaming: Boolean = false,
@@ -31,13 +33,16 @@ data class AdminUiState(
     val errorMessage: String? = null
 )
 
-class AdminViewModel(context: Context) : ViewModel() {
-
-    private val appContext = context.applicationContext
-
-    private val repository = AdminSettingsRepository(
-        CameraStreamDatabase.getInstance(appContext).adminSettingsDao()
-    )
+@HiltViewModel
+class AdminViewModel @Inject constructor(
+    private val loadAdminSettingsUseCase: LoadAdminSettingsUseCase,
+    private val saveAdminSettingsUseCase: SaveAdminSettingsUseCase,
+    private val fetchNetworkInfoUseCase: FetchNetworkInfoUseCase,
+    private val startStreamingUseCase: StartStreamingUseCase,
+    private val stopStreamingUseCase: StopStreamingUseCase,
+    private val switchCameraUseCase: SwitchCameraUseCase,
+    private val copyToClipboardUseCase: CopyToClipboardUseCase
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AdminUiState())
     val uiState: StateFlow<AdminUiState> = _uiState
@@ -58,52 +63,39 @@ class AdminViewModel(context: Context) : ViewModel() {
     private suspend fun initializeNetworkDetection() {
         try {
             val previousIpAddress = _uiState.value.localIpAddress
-            val isWifiConnected = NetworkUtils.isWifiConnected(appContext)
+            val networkInfo = fetchNetworkInfoUseCase()
 
-            if (!isWifiConnected) {
-                updateStateAndPersist(
-                    _uiState.value.copy(
-                        isWifiConnected = false,
-                        errorMessage = "WiFi non connecté. Veuillez connecter le WiFi.",
-                        isLoading = false
-                    )
-                )
-                hasCompletedInitialNetworkCheck = true
-                return
-            }
-
-            val ipAddress = NetworkUtils.getLocalIpAddress(appContext)
-            val streamingUrl = NetworkUtils.getStreamingUrl(appContext)
-            val statusUrl = NetworkUtils.getStatusUrl(appContext)
-            val wifiNetworkName = NetworkUtils.getWifiNetworkName(appContext)
-
-            if (ipAddress != null) {
+            if (networkInfo.localIpAddress != null) {
                 val showIpChangeNotice = hasCompletedInitialNetworkCheck &&
                     !previousIpAddress.isNullOrBlank() &&
-                    previousIpAddress != ipAddress
+                    previousIpAddress != networkInfo.localIpAddress
 
                 updateStateAndPersist(
                     _uiState.value.copy(
-                        localIpAddress = ipAddress,
-                        streamingUrl = streamingUrl,
-                        statusUrl = statusUrl,
-                        isWifiConnected = true,
-                        wifiNetworkName = wifiNetworkName,
+                        localIpAddress = networkInfo.localIpAddress,
+                        streamingUrl = networkInfo.streamingUrl,
+                        statusUrl = networkInfo.statusUrl,
+                        isWifiConnected = networkInfo.isWifiConnected,
+                        wifiNetworkName = networkInfo.wifiNetworkName,
                         ipChangeNotice = if (showIpChangeNotice) {
-                            "IP locale changée : $previousIpAddress -> $ipAddress"
+                            "IP locale changée : $previousIpAddress -> ${networkInfo.localIpAddress}"
                         } else {
                             _uiState.value.ipChangeNotice
                         },
                         isLoading = false,
-                        errorMessage = null
+                        errorMessage = networkInfo.errorMessage
                     )
                 )
                 hasCompletedInitialNetworkCheck = true
             } else {
                 updateStateAndPersist(
                     _uiState.value.copy(
-                        isWifiConnected = false,
-                        errorMessage = "Impossible de détecter l'adresse IP. Essayez de reconnecter le WiFi.",
+                        isWifiConnected = networkInfo.isWifiConnected,
+                        localIpAddress = networkInfo.localIpAddress,
+                        streamingUrl = networkInfo.streamingUrl,
+                        statusUrl = networkInfo.statusUrl,
+                        wifiNetworkName = networkInfo.wifiNetworkName,
+                        errorMessage = networkInfo.errorMessage,
                         isLoading = false
                     )
                 )
@@ -135,14 +127,7 @@ class AdminViewModel(context: Context) : ViewModel() {
     }
 
     fun startStreaming() {
-        val intent = Intent(appContext, CameraStreamService::class.java).apply {
-            action = CameraStreamService.ACTION_START
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            appContext.startForegroundService(intent)
-        } else {
-            appContext.startService(intent)
-        }
+        startStreamingUseCase()
         _uiState.value = _uiState.value.copy(
             isStreaming = true
         )
@@ -150,10 +135,7 @@ class AdminViewModel(context: Context) : ViewModel() {
     }
 
     fun stopStreaming() {
-        val intent = Intent(appContext, CameraStreamService::class.java).apply {
-            action = CameraStreamService.ACTION_STOP
-        }
-        appContext.startService(intent)
+        stopStreamingUseCase()
         _uiState.value = _uiState.value.copy(
             isStreaming = false,
             isWakeLockActive = false  // ✅ WakeLock est désactivé à l'arrêt
@@ -162,10 +144,7 @@ class AdminViewModel(context: Context) : ViewModel() {
     }
 
     fun switchCamera() {
-        val intent = Intent(appContext, CameraStreamService::class.java).apply {
-            action = CameraStreamService.ACTION_SWITCH_CAMERA
-        }
-        appContext.startService(intent)
+        switchCameraUseCase()
         _uiState.value = _uiState.value.copy(isFrontCamera = !_uiState.value.isFrontCamera)
         persistCurrentState()
     }
@@ -181,13 +160,11 @@ class AdminViewModel(context: Context) : ViewModel() {
 
     fun copyUrlToClipboard() {
         val url = _uiState.value.streamingUrl ?: return
-        val clipboard = appContext.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        val clip = android.content.ClipData.newPlainText("Streaming URL", url)
-        clipboard.setPrimaryClip(clip)
+        copyToClipboardUseCase("Streaming URL", url)
     }
 
     private suspend fun restorePersistedState() {
-        val saved = repository.load() ?: return
+        val saved = loadAdminSettingsUseCase()
         _uiState.value = _uiState.value.copy(
             isStreaming = saved.isStreaming,
             isFrontCamera = saved.isFrontCamera,
@@ -199,14 +176,14 @@ class AdminViewModel(context: Context) : ViewModel() {
 
     private fun persistCurrentState() {
         viewModelScope.launch {
-            repository.save(_uiState.value.toEntity())
+            saveAdminSettingsUseCase(_uiState.value.toDomain())
         }
     }
 
     private suspend fun updateStateAndPersist(newState: AdminUiState) {
         if (_uiState.value == newState) return
         _uiState.value = newState
-        repository.save(newState.toEntity())
+        saveAdminSettingsUseCase(newState.toDomain())
     }
 
     private fun startIpMonitoring() {
@@ -219,8 +196,8 @@ class AdminViewModel(context: Context) : ViewModel() {
         }
     }
 
-    private fun AdminUiState.toEntity(): AdminSettingsEntity {
-        return AdminSettingsEntity(
+    private fun AdminUiState.toDomain(): AdminSettings {
+        return AdminSettings(
             isStreaming = isStreaming,
             isFrontCamera = isFrontCamera,
             localIpAddress = localIpAddress,
@@ -233,4 +210,5 @@ class AdminViewModel(context: Context) : ViewModel() {
         super.onCleared()
     }
 }
+
 

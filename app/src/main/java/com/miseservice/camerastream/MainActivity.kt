@@ -21,12 +21,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.miseservice.camerastream.ui.screens.AdminScreen
 import com.miseservice.camerastream.ui.theme.CameraStreamTheme
-import com.miseservice.camerastream.viewmodel.AdminViewModel
+import com.miseservice.camerastream.presentation.viewmodel.AdminViewModel
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,7 +42,6 @@ class MainActivity : ComponentActivity() {
             CameraStreamTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { paddingValues ->
                     MainContent(
-                        context = this@MainActivity,
                         window = window,
                         modifier = Modifier.padding(paddingValues)
                     )
@@ -52,7 +53,6 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun MainContent(
-    context: android.content.Context,
     window: android.view.Window,
     modifier: Modifier = Modifier
 ) {
@@ -87,9 +87,7 @@ private fun MainContent(
     }
 
     if (permissionsGranted) {
-        val viewModel = viewModel<AdminViewModel>(
-            factory = AdminViewModelFactory(context)
-        )
+        val viewModel: AdminViewModel = hiltViewModel()
 
         // Même pattern que le projet Parking :
         // FLAG_KEEP_SCREEN_ON appliqué/retiré de façon réactive selon l'état du bouton veille
@@ -103,17 +101,5 @@ private fun MainContent(
         }
 
         AdminScreen(viewModel = viewModel, modifier = modifier)
-    }
-}
-
-class AdminViewModelFactory(private val context: android.content.Context) :
-    androidx.lifecycle.ViewModelProvider.Factory {
-    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-        return if (modelClass.isAssignableFrom(AdminViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            AdminViewModel(context) as T
-        } else {
-            throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
-        }
     }
 }
