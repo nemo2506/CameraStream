@@ -197,7 +197,7 @@ object NetworkUtils {
      */
     fun getStreamingUrl(context: Context, port: Int = 8080): String? {
         val ipAddress = getLocalIpAddress(context) ?: return null
-        return "http://$ipAddress:$port/stream"
+        return "http://$ipAddress:$port/viewer"
     }
 
     /**

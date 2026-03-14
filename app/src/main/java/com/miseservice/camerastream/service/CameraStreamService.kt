@@ -11,10 +11,9 @@ import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.miseservice.camerastream.R
-import com.miseservice.camerastream.camera.CameraFrame
-import com.miseservice.camerastream.camera.CameraManager
-import com.miseservice.camerastream.server.StreamingHttpServer
+import com.miseservice.camerastream.server.WebRtcHttpServer
 import com.miseservice.camerastream.utils.NetworkUtils
+import com.miseservice.camerastream.webrtc.WebRtcEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -22,8 +21,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 class CameraStreamService : Service() {
-    private var cameraManager: CameraManager? = null
-    private var httpServer: StreamingHttpServer? = null
+    private var webRtcEngine: WebRtcEngine? = null
+    private var signalingServer: WebRtcHttpServer? = null
     // CPU WakeLock : maintient le CPU et les capteurs d'orientation actifs même écran éteint
     // L'écran est géré par FLAG_KEEP_SCREEN_ON dans MainActivity (pattern Parking)
     private var cpuWakeLock: PowerManager.WakeLock? = null
@@ -54,29 +53,24 @@ class CameraStreamService : Service() {
     }
 
     private fun startStreaming() {
-        if (httpServer != null) return // Already running
+        if (signalingServer != null) return
 
         scope.launch(Dispatchers.Default) {
             try {
-                // Initialize Camera
-                cameraManager = CameraManager(this@CameraStreamService)
-                cameraManager?.initializeCamera()
-
-                // Create HTTP Server
-                httpServer = StreamingHttpServer(
+                webRtcEngine = WebRtcEngine(this@CameraStreamService).also { it.start() }
+                signalingServer = WebRtcHttpServer(
                     port = 8080,
-                    frameDataFlow = cameraManager?.latestFrameData ?: kotlinx.coroutines.flow.MutableStateFlow<CameraFrame?>(null)
-                )
-                httpServer?.start()
+                    webRtcEngine = webRtcEngine ?: error("WebRTC engine absent")
+                ).also { it.start() }
 
                 // Start foreground notification
-                val notification = createNotification("Streaming actif")
+                val notification = createNotification("Streaming WebRTC actif")
                 startForeground(NOTIFICATION_ID, notification)
 
                 // Acquérir automatiquement le WakeLock CPU pour maintenir
                 // les capteurs actifs (orientation, gyroscope) même écran éteint
                 acquireWakeLock()
-                android.util.Log.d("CameraStreamService", "Streaming started (WakeLock auto-acquired)")
+                android.util.Log.d("CameraStreamService", "WebRTC streaming started")
             } catch (e: Exception) {
                 e.printStackTrace()
                 android.util.Log.e("CameraStreamService", "Error starting streaming: ${e.message}", e)
@@ -89,10 +83,10 @@ class CameraStreamService : Service() {
         try {
             android.util.Log.d("CameraStreamService", "Stopping streaming...")
 
-            httpServer?.stop()
-            httpServer = null
-            cameraManager?.release()
-            cameraManager = null
+            signalingServer?.stop()
+            signalingServer = null
+            webRtcEngine?.stop()
+            webRtcEngine = null
 
             // ✅ S'assurer que WakeLock est libéré
             releaseWakeLock()
@@ -108,7 +102,7 @@ class CameraStreamService : Service() {
     }
 
     private fun switchCamera() {
-        cameraManager?.switchCamera()
+        webRtcEngine?.switchCamera()
     }
 
     /** Maintient le CPU actif (et les capteurs d'orientation) même écran éteint */
@@ -158,7 +152,7 @@ class CameraStreamService : Service() {
 
     private fun createNotification(contentText: String): Notification {
         val ip = NetworkUtils.getLocalIpAddress(this)
-        val displayText = if (ip != null) "IP: $ip" else "Configuration..."
+        val displayText = if (ip != null) "WebRTC: http://$ip:8080/viewer" else contentText
 
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle("Streaming Caméra")
