@@ -125,12 +125,10 @@ class AdminViewModel(private val context: Context) : ViewModel() {
     }
 
     fun setWakeLockEnabled(enabled: Boolean) {
-        val intent = Intent(context, CameraStreamService::class.java).apply {
-            action = CameraStreamService.ACTION_SET_WAKE_LOCK
-            putExtra(CameraStreamService.EXTRA_WAKE_LOCK_ENABLED, enabled)
-        }
-        context.startService(intent)
-        android.util.Log.d("AdminViewModel", "Setting WakeLock to: $enabled")
+        // Le maintien écran allumé est géré par FLAG_KEEP_SCREEN_ON dans MainActivity
+        // (même pattern que le projet Parking)
+        // Le CPU WakeLock est géré automatiquement par le service au démarrage du streaming
+        android.util.Log.d("AdminViewModel", "Setting WakeLock (screen) to: $enabled")
         _uiState.value = _uiState.value.copy(isWakeLockActive = enabled)
     }
 
