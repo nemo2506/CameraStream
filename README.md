@@ -6,11 +6,15 @@ Application Android de streaming camera en WebRTC avec serveur HTTP integre.
 
 - 🎥 Streaming video WebRTC depuis un telephone Android.
 - 👥 Multi-client: plusieurs viewers peuvent se connecter en parallele.
+- 🔌 Port de streaming configurable dans l'admin, persistant en base locale.
+- ⚡ Application du nouveau port en live (sans ecran supplementaire).
 - 🌐 Viewer web integre expose sur `GET /viewer` (et `/`).
 - 🔁 Signaling HTTP via `POST /api/webrtc/offer`.
 - 📊 Endpoint de statut via `GET /status` avec compteur de viewers.
 - 🛡️ Reponse CORS et preflight `OPTIONS /api/webrtc/offer` geres cote serveur.
 - 🔋 Service Android au premier plan (`CameraStreamService`) avec WakeLock CPU.
+- 📱 Mode portrait force en background, puis restauration de l'orientation au retour foreground.
+- 📷 Capture WebRTC en resolution maximale supportee par la camera (fit/fill ne change que le rendu visuel).
 
 ## SDK et compatibilite Android 🤖
 
@@ -28,7 +32,7 @@ Permissions principales dans `app/src/main/AndroidManifest.xml`:
 - `android.permission.CAMERA`
 - `android.permission.INTERNET`
 - `android.permission.FOREGROUND_SERVICE`
-- `android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION`
+- `android.permission.FOREGROUND_SERVICE_CAMERA`
 - `android.permission.WAKE_LOCK`
 - permissions reseau (`ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, etc.)
 
@@ -54,7 +58,7 @@ Protocole principal: **WebRTC** (ICE + DTLS + SRTP) pour le media, avec signalin
       </td>
       <td style="vertical-align:top;border:1px solid #3fb950;border-radius:10px;padding:10px;">
         <strong>[ID-02] 📱 WebRtcHttpServer</strong><br />
-        Android :8080<br /><br />
+        Android :&lt;port-configure&gt;<br /><br />
         <code>A2 POST /api/webrtc/offer</code><br />
         <code>C1 GET /status</code>
       </td>
@@ -88,7 +92,7 @@ Protocole principal: **WebRTC** (ICE + DTLS + SRTP) pour le media, avec signalin
         |
         | HTTP (LAN)
         v
-[ID-02] 📱 Android :8080
+[ID-02] 📱 Android :<port-configure>
 ```
 
 ## Endpoints HTTP 🔌
@@ -105,8 +109,12 @@ Protocole principal: **WebRTC** (ICE + DTLS + SRTP) pour le media, avec signalin
 2. Demarrer le streaming dans l'application (service foreground).
 3. Recuperer l'IP locale du telephone (affichee dans la notification).
 4. Ouvrir un navigateur sur le meme reseau et acceder a:
-   - `http://<ip-telephone>:8080/viewer`
-5. (Optionnel) Placer Apache en reverse proxy HTTPS vers `http://<ip-telephone>:8080`.
+   - `http://<ip-telephone>:<port-configure>/viewer`
+5. (Optionnel) Placer Apache en reverse proxy HTTPS vers `http://<ip-telephone>:<port-configure>`.
+6. En admin, apres sauvegarde du port:
+   - le champ perd le focus,
+   - la vue revient vers la section **Url de streaming**,
+   - l'URL affichee est mise a jour avec le nouveau port.
 
 Exemple de fichier Apache (`/etc/apache2/sites-available/camerastream.conf`) :
 
@@ -137,8 +145,8 @@ Exemple de fichier Apache (`/etc/apache2/sites-available/camerastream.conf`) :
 
     RedirectMatch ^/$ /viewer
 
-    ProxyPass        / http://192.168.XXX.XXX:8080/
-    ProxyPassReverse / http://192.168.XXX.XXX:8080/
+    ProxyPass        / http://192.168.XXX.XXX:<port-configure>/
+    ProxyPassReverse / http://192.168.XXX.XXX:<port-configure>/
 
     Header always set Access-Control-Allow-Origin "*"
     Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS"
