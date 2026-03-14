@@ -1,8 +1,11 @@
 package com.miseservice.camerastream.server
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.YuvImage
-import android.util.Size
+import com.miseservice.camerastream.camera.CameraFrame
 import kotlinx.coroutines.flow.StateFlow
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
@@ -12,14 +15,19 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class StreamingHttpServer(
     private val port: Int = 8080,
-    private val frameDataFlow: StateFlow<ByteArray?>,
-    private val frameSize: Size = Size(1280, 720)
+    private val frameDataFlow: StateFlow<CameraFrame?>
 ) {
 
     private val isRunning = AtomicBoolean(false)
     private var serverSocket: ServerSocket? = null
     private var serverThread: Thread? = null
-    private var lastFrameData: ByteArray? = null
+    @Volatile
+    private var cachedFrameRef: CameraFrame? = null
+
+    @Volatile
+    private var cachedJpeg: ByteArray? = null
+
+    private val encodeLock = Any()
 
     fun start() {
         if (isRunning.getAndSet(true)) return
@@ -102,6 +110,7 @@ class StreamingHttpServer(
 
             var lastTime = System.currentTimeMillis()
             val frameInterval = 33 // ~30 FPS
+            var clientLastFrame: CameraFrame? = null
 
             while (isRunning.get()) {
                 try {
@@ -112,9 +121,12 @@ class StreamingHttpServer(
                     lastTime = System.currentTimeMillis()
 
                     val frameData = frameDataFlow.value
-                    if (frameData != null && frameData !== lastFrameData) {
-                        lastFrameData = frameData
-                        val jpeg = yuv420ToJpeg(frameData, frameSize.width, frameSize.height, 85)
+                    if (frameData != null && frameData !== clientLastFrame) {
+                        clientLastFrame = frameData
+                        val jpeg = getOrEncodeJpeg(frameData)
+                        if (jpeg.isEmpty()) {
+                            continue
+                        }
 
                         output.write(boundary)
                         output.write(crlf)
@@ -126,12 +138,37 @@ class StreamingHttpServer(
                         output.write(crlf)
                         output.flush()
                     }
-                } catch (e: SocketException) {
+                } catch (_: SocketException) {
                     break
                 }
             }
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    private fun getOrEncodeJpeg(frame: CameraFrame): ByteArray {
+        val snapshotFrame = cachedFrameRef
+        val snapshotJpeg = cachedJpeg
+        if (snapshotFrame === frame && snapshotJpeg != null) {
+            return snapshotJpeg
+        }
+
+        synchronized(encodeLock) {
+            if (cachedFrameRef === frame && cachedJpeg != null) {
+                return cachedJpeg ?: ByteArray(0)
+            }
+
+            val encoded = yuv420ToJpeg(
+                nv21 = frame.nv21,
+                width = frame.width,
+                height = frame.height,
+                rotationDegrees = frame.rotationDegrees
+            )
+
+            cachedFrameRef = frame
+            cachedJpeg = encoded
+            return encoded
         }
     }
 
@@ -167,21 +204,55 @@ class StreamingHttpServer(
         nv21: ByteArray,
         width: Int,
         height: Int,
-        quality: Int = 85
+        rotationDegrees: Int = 0
     ): ByteArray {
         return try {
             val yuvImage = YuvImage(nv21, android.graphics.ImageFormat.NV21, width, height, null)
             val out = ByteArrayOutputStream()
-            yuvImage.compressToJpeg(Rect(0, 0, width, height), quality, out)
-            out.toByteArray()
+            yuvImage.compressToJpeg(Rect(0, 0, width, height), 85, out)
+            rotateJpegIfNeeded(out.toByteArray(), rotationDegrees)
         } catch (e: Exception) {
             e.printStackTrace()
             ByteArray(0)
         }
     }
 
+    private fun rotateJpegIfNeeded(jpeg: ByteArray, rotationDegrees: Int): ByteArray {
+        val normalizedRotation = ((rotationDegrees % 360) + 360) % 360
+        if (normalizedRotation == 0) return jpeg
+
+        return try {
+            val sourceBitmap = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size) ?: return jpeg
+            val matrix = Matrix().apply { postRotate(normalizedRotation.toFloat()) }
+            val rotatedBitmap = Bitmap.createBitmap(
+                sourceBitmap,
+                0,
+                0,
+                sourceBitmap.width,
+                sourceBitmap.height,
+                matrix,
+                true
+            )
+
+            val output = ByteArrayOutputStream()
+            rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, 85, output)
+
+            if (rotatedBitmap !== sourceBitmap) {
+                rotatedBitmap.recycle()
+            }
+            sourceBitmap.recycle()
+
+            output.toByteArray()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            jpeg
+        }
+    }
+
     fun stop() {
         isRunning.set(false)
+        cachedFrameRef = null
+        cachedJpeg = null
         try {
             serverSocket?.close()
         } catch (e: Exception) {

@@ -6,12 +6,12 @@ import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager as AndroidCameraManager
+import android.hardware.display.DisplayManager
 import android.media.Image
 import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
-import android.util.Size
 import android.view.Surface
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,9 +28,11 @@ class CameraManager(
 
     private var currentCameraId = ""
     private var isUsingFrontCamera = true
+    private var currentSensorOrientation = 90
+    private var currentLensFacing = CameraCharacteristics.LENS_FACING_FRONT
 
-    private val _latestFrameData = MutableStateFlow<ByteArray?>(null)
-    val latestFrameData: StateFlow<ByteArray?> = _latestFrameData
+    private val _latestFrameData = MutableStateFlow<CameraFrame?>(null)
+    val latestFrameData: StateFlow<CameraFrame?> = _latestFrameData
 
     private val cameraDeviceCallback = object : CameraDevice.StateCallback() {
         override fun onOpened(camera: CameraDevice) {
@@ -57,8 +59,14 @@ class CameraManager(
             val image = reader.acquireLatestImage()
             if (image != null) {
                 val nv21 = imageToNV21(image)
+                val frame = CameraFrame(
+                    nv21 = nv21,
+                    width = image.width,
+                    height = image.height,
+                    rotationDegrees = calculateJpegRotationDegrees()
+                )
                 image.close()
-                _latestFrameData.value = nv21
+                _latestFrameData.value = frame
             }
         } catch (e: Exception) {
             Log.e("CameraManager", "Error processing image: ${e.message}", e)
@@ -101,6 +109,11 @@ class CameraManager(
             }
 
             Log.d("CameraManager", "Using camera: $currentCameraId (front=$isUsingFrontCamera)")
+
+            val selectedCharacteristics = cameraManager.getCameraCharacteristics(currentCameraId)
+            currentSensorOrientation = selectedCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
+            currentLensFacing = selectedCharacteristics.get(CameraCharacteristics.LENS_FACING)
+                ?: CameraCharacteristics.LENS_FACING_FRONT
 
             // Create ImageReader for preview (use YUV format)
             imageReader = ImageReader.newInstance(1280, 720, android.graphics.ImageFormat.YUV_420_888, 2)
@@ -157,6 +170,36 @@ class CameraManager(
     }
 
     fun isFrontCamera(): Boolean = isUsingFrontCamera
+
+    private fun calculateJpegRotationDegrees(): Int {
+        val displayRotationDegrees = getDisplayRotationDegrees()
+        val sensorOrientation = currentSensorOrientation
+
+        return if (currentLensFacing == CameraCharacteristics.LENS_FACING_FRONT) {
+            (sensorOrientation + displayRotationDegrees) % 360
+        } else {
+            (sensorOrientation - displayRotationDegrees + 360) % 360
+        }
+    }
+
+    private fun getDisplayRotationDegrees(): Int {
+        return try {
+            val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+            val rotation = displayManager.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.rotation
+                ?: Surface.ROTATION_0
+
+            when (rotation) {
+                Surface.ROTATION_0 -> 0
+                Surface.ROTATION_90 -> 90
+                Surface.ROTATION_180 -> 180
+                Surface.ROTATION_270 -> 270
+                else -> 0
+            }
+        } catch (e: Exception) {
+            Log.w("CameraManager", "Cannot read display rotation, fallback to 0: ${e.message}")
+            0
+        }
+    }
 
     private fun imageToNV21(image: Image): ByteArray {
         val planes = image.planes

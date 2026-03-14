@@ -11,6 +11,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.miseservice.camerastream.R
+import com.miseservice.camerastream.camera.CameraFrame
 import com.miseservice.camerastream.camera.CameraManager
 import com.miseservice.camerastream.server.StreamingHttpServer
 import com.miseservice.camerastream.utils.NetworkUtils
@@ -32,7 +33,8 @@ class CameraStreamService : Service() {
         const val ACTION_START = "com.miseservice.camerastream.ACTION_START"
         const val ACTION_STOP = "com.miseservice.camerastream.ACTION_STOP"
         const val ACTION_SWITCH_CAMERA = "com.miseservice.camerastream.ACTION_SWITCH_CAMERA"
-        const val ACTION_TOGGLE_WAKE_LOCK = "com.miseservice.camerastream.ACTION_TOGGLE_WAKE_LOCK"
+        const val ACTION_SET_WAKE_LOCK = "com.miseservice.camerastream.ACTION_SET_WAKE_LOCK"
+        const val EXTRA_WAKE_LOCK_ENABLED = "extra_wake_lock_enabled"
     }
 
     override fun onCreate() {
@@ -45,7 +47,9 @@ class CameraStreamService : Service() {
             ACTION_START -> startStreaming()
             ACTION_STOP -> stopStreaming()
             ACTION_SWITCH_CAMERA -> switchCamera()
-            ACTION_TOGGLE_WAKE_LOCK -> toggleWakeLock()
+            ACTION_SET_WAKE_LOCK -> setWakeLockEnabled(
+                intent.getBooleanExtra(EXTRA_WAKE_LOCK_ENABLED, false)
+            )
             else -> startStreaming()
         }
 
@@ -64,7 +68,7 @@ class CameraStreamService : Service() {
                 // Create HTTP Server
                 httpServer = StreamingHttpServer(
                     port = 8080,
-                    frameDataFlow = cameraManager?.latestFrameData ?: kotlinx.coroutines.flow.MutableStateFlow(null)
+                    frameDataFlow = cameraManager?.latestFrameData ?: kotlinx.coroutines.flow.MutableStateFlow<CameraFrame?>(null)
                 )
                 httpServer?.start()
 
@@ -109,30 +113,38 @@ class CameraStreamService : Service() {
         cameraManager?.switchCamera()
     }
 
-    private fun toggleWakeLock() {
+    private fun setWakeLockEnabled(enabled: Boolean) {
         try {
-            if (wakeLock?.isHeld == true) {
-                android.util.Log.d("CameraStreamService", "Releasing WakeLock")
-                releaseWakeLock()
-            } else {
-                android.util.Log.d("CameraStreamService", "Acquiring WakeLock")
+            if (enabled) {
+                android.util.Log.d("CameraStreamService", "Setting WakeLock: ON")
                 acquireWakeLock()
+            } else {
+                android.util.Log.d("CameraStreamService", "Setting WakeLock: OFF")
+                releaseWakeLock()
             }
         } catch (e: Exception) {
-            android.util.Log.e("CameraStreamService", "Error toggling WakeLock: ${e.message}", e)
+            android.util.Log.e("CameraStreamService", "Error setting WakeLock: ${e.message}", e)
         }
     }
 
     private fun acquireWakeLock() {
         try {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = powerManager.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK,
-                "CameraStream:WakeLock"
-            ).apply {
-                setReferenceCounted(false)
-                acquire()
+            if (wakeLock?.isHeld == true) {
+                android.util.Log.d("CameraStreamService", "WakeLock already held")
+                return
             }
+
+            if (wakeLock == null) {
+                val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+                wakeLock = powerManager.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK,
+                    "CameraStream:WakeLock"
+                ).apply {
+                    setReferenceCounted(false)
+                }
+            }
+
+            wakeLock?.acquire()
             android.util.Log.d("CameraStreamService", "WakeLock acquired: ${wakeLock?.isHeld}")
         } catch (e: Exception) {
             android.util.Log.e("CameraStreamService", "Error acquiring WakeLock: ${e.message}", e)

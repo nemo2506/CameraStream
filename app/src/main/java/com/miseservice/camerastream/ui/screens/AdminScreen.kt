@@ -94,8 +94,9 @@ fun AdminScreen(viewModel: AdminViewModel, modifier: Modifier = Modifier) {
 
         // Wake Lock Control
         WakeLockCard(
+            isStreaming = uiState.isStreaming,
             isWakeLockActive = uiState.isWakeLockActive,
-            onToggleWakeLock = { viewModel.toggleWakeLock() }
+            onWakeLockChanged = { enabled -> viewModel.setWakeLockEnabled(enabled) }
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -476,8 +477,9 @@ private fun NetworkInfoCard(
 
 @Composable
 private fun WakeLockCard(
+    isStreaming: Boolean,
     isWakeLockActive: Boolean,
-    onToggleWakeLock: () -> Unit
+    onWakeLockChanged: (Boolean) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -501,7 +503,11 @@ private fun WakeLockCard(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = if (isWakeLockActive) "Veille désactivée" else "Veille activée",
+                    text = when {
+                        !isStreaming -> "Démarrez le streaming pour contrôler la veille"
+                        isWakeLockActive -> "Veille désactivée"
+                        else -> "Veille activée"
+                    },
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -509,7 +515,8 @@ private fun WakeLockCard(
 
             Switch(
                 checked = isWakeLockActive,
-                onCheckedChange = { onToggleWakeLock() }
+                onCheckedChange = onWakeLockChanged,
+                enabled = isStreaming
             )
         }
     }
