@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class WebRtcEngine(
     context: Context
-) {
+) : WebRtcSessionGateway {
     private val appContext = context.applicationContext
 
     private val eglBase: EglBase = EglBase.create()
@@ -84,7 +84,7 @@ class WebRtcEngine(
         })
     }
 
-    suspend fun createAnswer(offerSdp: String): String = withContext(Dispatchers.Default) {
+    override suspend fun createAnswer(offerSdp: String): String = withContext(Dispatchers.Default) {
         ensureStarted()
         val factory = peerConnectionFactory ?: error("PeerConnectionFactory non initialisee")
         val currentTrack = videoTrack ?: error("Video track non initialisee")

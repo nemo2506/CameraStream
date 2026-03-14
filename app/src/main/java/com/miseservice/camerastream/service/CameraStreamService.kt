@@ -11,18 +11,22 @@ import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.miseservice.camerastream.R
-import com.miseservice.camerastream.server.WebRtcHttpServer
+import com.miseservice.camerastream.data.streaming.StreamingRuntime
 import com.miseservice.camerastream.utils.NetworkUtils
-import com.miseservice.camerastream.webrtc.WebRtcEngine
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class CameraStreamService : Service() {
-    private var webRtcEngine: WebRtcEngine? = null
-    private var signalingServer: WebRtcHttpServer? = null
+    @Inject
+    lateinit var streamingRuntime: StreamingRuntime
+
+    private var isStreamingRuntimeStarted = false
     // CPU WakeLock : maintient le CPU et les capteurs d'orientation actifs même écran éteint
     // L'écran est géré par FLAG_KEEP_SCREEN_ON dans MainActivity (pattern Parking)
     private var cpuWakeLock: PowerManager.WakeLock? = null
@@ -53,15 +57,12 @@ class CameraStreamService : Service() {
     }
 
     private fun startStreaming() {
-        if (signalingServer != null) return
+        if (isStreamingRuntimeStarted) return
 
         scope.launch(Dispatchers.Default) {
             try {
-                webRtcEngine = WebRtcEngine(this@CameraStreamService).also { it.start() }
-                signalingServer = WebRtcHttpServer(
-                    port = 8080,
-                    webRtcEngine = webRtcEngine ?: error("WebRTC engine absent")
-                ).also { it.start() }
+                streamingRuntime.start()
+                isStreamingRuntimeStarted = true
 
                 // Start foreground notification
                 val notification = createNotification("Streaming WebRTC actif")
@@ -83,10 +84,8 @@ class CameraStreamService : Service() {
         try {
             android.util.Log.d("CameraStreamService", "Stopping streaming...")
 
-            signalingServer?.stop()
-            signalingServer = null
-            webRtcEngine?.stop()
-            webRtcEngine = null
+            streamingRuntime.stop()
+            isStreamingRuntimeStarted = false
 
             // ✅ S'assurer que WakeLock est libéré
             releaseWakeLock()
@@ -102,7 +101,7 @@ class CameraStreamService : Service() {
     }
 
     private fun switchCamera() {
-        webRtcEngine?.switchCamera()
+        streamingRuntime.switchCamera()
     }
 
     /** Maintient le CPU actif (et les capteurs d'orientation) même écran éteint */

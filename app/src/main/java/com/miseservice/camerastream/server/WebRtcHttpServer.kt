@@ -1,6 +1,6 @@
 package com.miseservice.camerastream.server
 
-import com.miseservice.camerastream.webrtc.WebRtcEngine
+import com.miseservice.camerastream.webrtc.WebRtcSessionGateway
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class WebRtcHttpServer(
     private val port: Int = 8080,
-    private val webRtcEngine: WebRtcEngine
+    private val webRtcSessionGateway: WebRtcSessionGateway
 ) {
     private val isRunning = AtomicBoolean(false)
     private var serverSocket: ServerSocket? = null
@@ -123,7 +123,7 @@ class WebRtcHttpServer(
             }
 
             val answerSdp = runBlocking {
-                webRtcEngine.createAnswer(offerSdp)
+                webRtcSessionGateway.createAnswer(offerSdp)
             }
 
             val response = JSONObject()
