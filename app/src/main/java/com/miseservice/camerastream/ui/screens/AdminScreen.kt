@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraFront
@@ -29,12 +30,16 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -46,6 +51,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.input.KeyboardType
 import com.miseservice.camerastream.presentation.viewmodel.AdminViewModel
 
 @Composable
@@ -94,6 +100,12 @@ fun AdminScreen(viewModel: AdminViewModel, modifier: Modifier = Modifier) {
 
         SectionLabel(text = "Réglages")
 
+        PortEditorCard(
+            currentPort = uiState.streamingPort,
+            isStreaming = uiState.isStreaming,
+            onPortChanged = { viewModel.setStreamingPort(it) }
+        )
+
         CameraSelectionCard(
             isFrontCamera = uiState.isFrontCamera,
             onSwitchCamera = { viewModel.switchCamera() }
@@ -113,6 +125,65 @@ fun AdminScreen(viewModel: AdminViewModel, modifier: Modifier = Modifier) {
         )
 
         Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun PortEditorCard(
+    currentPort: Int,
+    isStreaming: Boolean,
+    onPortChanged: (String) -> Unit
+) {
+    var input by remember(currentPort) { mutableStateOf(currentPort.toString()) }
+    val parsedPort = input.toIntOrNull()
+    val isValidPort = parsedPort != null && parsedPort in 1..65535
+    val isChanged = parsedPort != null && parsedPort != currentPort
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            EmojiText(
+                emoji = "🔌",
+                label = "Port du serveur WebRTC",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it.filter(Char::isDigit).take(5) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Port (1-65535)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                supportingText = {
+                    Text(
+                        if (isStreaming) {
+                            "Le nouveau port sera pris en compte au prochain démarrage du streaming."
+                        } else {
+                            "Port actuel: $currentPort"
+                        }
+                    )
+                },
+                isError = input.isNotBlank() && !isValidPort
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = { onPortChanged(input) },
+                enabled = isValidPort && isChanged,
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Appliquer le port")
+            }
+        }
     }
 }
 

@@ -22,6 +22,7 @@ import javax.inject.Inject
 data class AdminUiState(
     val isStreaming: Boolean = false,
     val isFrontCamera: Boolean = true,
+    val streamingPort: Int = 8080,
     val localIpAddress: String? = null,
     val streamingUrl: String? = null,
     val statusUrl: String? = null,
@@ -63,7 +64,7 @@ class AdminViewModel @Inject constructor(
     private suspend fun initializeNetworkDetection() {
         try {
             val previousIpAddress = _uiState.value.localIpAddress
-            val networkInfo = fetchNetworkInfoUseCase()
+            val networkInfo = fetchNetworkInfoUseCase(_uiState.value.streamingPort)
 
             if (networkInfo.localIpAddress != null) {
                 val showIpChangeNotice = hasCompletedInitialNetworkCheck &&
@@ -127,11 +128,21 @@ class AdminViewModel @Inject constructor(
     }
 
     fun startStreaming() {
-        startStreamingUseCase()
+        startStreamingUseCase(_uiState.value.streamingPort)
         _uiState.value = _uiState.value.copy(
             isStreaming = true
         )
         persistCurrentState()
+    }
+
+    fun setStreamingPort(rawPort: String) {
+        val parsed = rawPort.toIntOrNull()
+        val validatedPort = parsed?.takeIf { it in 1..65535 } ?: return
+        if (validatedPort == _uiState.value.streamingPort) return
+
+        _uiState.value = _uiState.value.copy(streamingPort = validatedPort)
+        persistCurrentState()
+        refreshNetworkDetection()
     }
 
     fun stopStreaming() {
@@ -168,6 +179,7 @@ class AdminViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(
             isStreaming = saved.isStreaming,
             isFrontCamera = saved.isFrontCamera,
+            streamingPort = saved.streamingPort,
             localIpAddress = saved.localIpAddress,
             isWakeLockActive = saved.isWakeLockActive,
             isLoading = true
@@ -200,6 +212,7 @@ class AdminViewModel @Inject constructor(
         return AdminSettings(
             isStreaming = isStreaming,
             isFrontCamera = isFrontCamera,
+            streamingPort = streamingPort,
             localIpAddress = localIpAddress,
             isWakeLockActive = isWakeLockActive
         )
