@@ -132,43 +132,62 @@ object NetworkUtils {
     }
 
     /**
-     * Récupère le nom du réseau WiFi connecté
-     * Gère les cas "unknown ssid" et les formats mal encodés
+     * Nettoie un SSID brut (retire les guillemets, <unknown ssid>, etc.)
+     */
+    private fun cleanSsid(raw: String?): String? {
+        if (raw.isNullOrEmpty()) return null
+        val cleaned = raw.trim()
+            .replace("\"", "")
+            .replace("<unknown ssid>", "")
+            .trim()
+        return if (cleaned.isNotEmpty()) cleaned else null
+    }
+
+    /**
+     * Récupère le nom du réseau WiFi connecté.
+     * - Android 10+ (API 29+) : utilise ConnectivityManager + WifiInfo.getSSID()
+     *   (requiert ACCESS_FINE_LOCATION ET que les services de localisation soient activés)
+     * - Fallback : WifiManager.getConnectionInfo() (déprécié API 31+)
      */
     fun getWifiNetworkName(context: Context): String? {
         return try {
-            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            // ── Méthode moderne (API 29+) ──────────────────────────────────────────
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val connectivityManager =
+                    context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                if (connectivityManager != null) {
+                    val network = connectivityManager.activeNetwork
+                    if (network != null) {
+                        val capabilities = connectivityManager.getNetworkCapabilities(network)
+                        if (capabilities != null &&
+                            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                        ) {
+                            val wifiInfo =
+                                capabilities.transportInfo as? android.net.wifi.WifiInfo
+                            val ssid = cleanSsid(wifiInfo?.ssid)
+                            if (ssid != null) return ssid
+                        }
+                    }
+                }
+            }
+
+            // ── Fallback WifiManager (API < 29 ou méthode moderne indisponible) ───
+            val wifiManager =
+                context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
             if (wifiManager != null) {
                 @Suppress("DEPRECATION")
                 val connectionInfo = wifiManager.connectionInfo
-
-                if (connectionInfo != null) {
-                    val ssid = connectionInfo.ssid
-
-                    // Vérifier si SSID n'est pas null ou vide
-                    if (!ssid.isNullOrEmpty()) {
-                        // Nettoyer le SSID
-                        val cleanedSsid = ssid
-                            .trim()
-                            .replace("\"", "")
-                            .replace("<unknown ssid>", "")
-                            .trim()
-
-                        // Si le SSID a du contenu après nettoyage
-                        if (cleanedSsid.isNotEmpty()) {
-                            return cleanedSsid
-                        }
-                    }
-
-                    // Fallback: SSID non disponible (permission location non accordée)
-                    // Retourner null pour laisser l'interface afficher "WiFi non détecté"
-                    return null
-                }
+                val ssid = cleanSsid(connectionInfo?.ssid)
+                if (ssid != null) return ssid
             }
+
+            android.util.Log.w(
+                "NetworkUtils",
+                "SSID indisponible – vérifiez que les services de localisation sont activés"
+            )
             null
         } catch (e: Exception) {
-            android.util.Log.e("NetworkUtils", "Error getting WiFi name: ${e.message}", e)
-            e.printStackTrace()
+            android.util.Log.e("NetworkUtils", "Erreur récupération SSID: ${e.message}", e)
             null
         }
     }

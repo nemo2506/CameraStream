@@ -36,7 +36,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -87,7 +86,6 @@ fun AdminScreen(viewModel: AdminViewModel, modifier: Modifier = Modifier) {
 
         // Network Information
         NetworkInfoCard(
-            localIp = uiState.localIpAddress,
             streamingUrl = uiState.streamingUrl,
             onCopyUrl = { viewModel.copyUrlToClipboard() }
         )
@@ -175,7 +173,7 @@ private fun NetworkDetectionSection(
                         )
                         if (uiState.isWifiConnected) {
                             val displayName = if (uiState.wifiNetworkName.isNullOrEmpty()) {
-                                "Connecté (SSID non disponible)"
+                                "Connecté (activez la localisation pour voir le SSID)"
                             } else {
                                 uiState.wifiNetworkName
                             }
@@ -196,7 +194,11 @@ private fun NetworkDetectionSection(
                     Icon(
                         imageVector = if (uiState.isWifiConnected) Icons.Default.Wifi else Icons.Default.WifiOff,
                         contentDescription = "WiFi",
-                        tint = if (uiState.isWifiConnected) Color.Green else MaterialTheme.colorScheme.error,
+                        tint = if (uiState.isWifiConnected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -207,7 +209,7 @@ private fun NetworkDetectionSection(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
                         .padding(12.dp)
                 ) {
                     Text(
@@ -229,12 +231,23 @@ private fun NetworkDetectionSection(
 
 @Composable
 private fun StatusCard(isStreaming: Boolean) {
+    val containerColor = if (isStreaming) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.secondaryContainer
+    }
+    val contentColor = if (isStreaming) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSecondaryContainer
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .height(100.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isStreaming) Color(0xFF4CAF50) else Color(0xFFFFB74D)
+            containerColor = containerColor
         ),
         shape = RoundedCornerShape(12.dp)
     ) {
@@ -252,12 +265,12 @@ private fun StatusCard(isStreaming: Boolean) {
                     text = if (isStreaming) "Streaming ACTIF" else "Streaming ARRÊTÉ",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = contentColor
                 )
                 Text(
                     text = if (isStreaming) "✓ Caméra en cours de diffusion" else "Cliquez pour démarrer",
                     fontSize = 14.sp,
-                    color = Color.White.copy(alpha = 0.9f)
+                    color = contentColor.copy(alpha = 0.9f)
                 )
             }
         }
@@ -270,6 +283,8 @@ private fun ControlButtonsSection(
     onStartStreaming: () -> Unit,
     onStopStreaming: () -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -282,13 +297,15 @@ private fun ControlButtonsSection(
                 .weight(1f)
                 .fillMaxSize(),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF4CAF50),
-                disabledContainerColor = Color(0xCCCCCC)
+                containerColor = colorScheme.primary,
+                contentColor = colorScheme.onPrimary,
+                disabledContainerColor = colorScheme.outline.copy(alpha = 0.24f),
+                disabledContentColor = colorScheme.onSurface.copy(alpha = 0.38f)
             ),
             enabled = !isStreaming,
             shape = RoundedCornerShape(8.dp)
         ) {
-            Text("Démarrer", color = Color.White, fontWeight = FontWeight.Bold)
+            Text("Démarrer", fontWeight = FontWeight.Bold)
         }
 
         Button(
@@ -297,13 +314,15 @@ private fun ControlButtonsSection(
                 .weight(1f)
                 .fillMaxSize(),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFFF44336),
-                disabledContainerColor = Color(0xCCCCCC)
+                containerColor = colorScheme.secondaryContainer,
+                contentColor = colorScheme.onSecondaryContainer,
+                disabledContainerColor = colorScheme.outline.copy(alpha = 0.24f),
+                disabledContentColor = colorScheme.onSurface.copy(alpha = 0.38f)
             ),
             enabled = isStreaming,
             shape = RoundedCornerShape(8.dp)
         ) {
-            Text("Arrêter", color = Color.White, fontWeight = FontWeight.Bold)
+            Text("Arrêter", fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -313,6 +332,8 @@ private fun CameraSelectionCard(
     isFrontCamera: Boolean,
     onSwitchCamera: () -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
@@ -341,18 +362,18 @@ private fun CameraSelectionCard(
                         .weight(1f)
                         .height(50.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isFrontCamera) Color(0xFF2196F3) else Color.Gray
+                        containerColor = if (isFrontCamera) colorScheme.primary else colorScheme.surfaceVariant,
+                        contentColor = if (isFrontCamera) colorScheme.onPrimary else colorScheme.onSurfaceVariant
                     ),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.CameraFront,
                         contentDescription = "Caméra avant",
-                        tint = Color.White,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.size(8.dp))
-                    Text("Avant", color = Color.White)
+                    Text("Avant")
                 }
 
                 Spacer(modifier = Modifier.size(12.dp))
@@ -363,18 +384,18 @@ private fun CameraSelectionCard(
                         .weight(1f)
                         .height(50.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (!isFrontCamera) Color(0xFF2196F3) else Color.Gray
+                        containerColor = if (!isFrontCamera) colorScheme.primary else colorScheme.surfaceVariant,
+                        contentColor = if (!isFrontCamera) colorScheme.onPrimary else colorScheme.onSurfaceVariant
                     ),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.CameraRear,
                         contentDescription = "Caméra arrière",
-                        tint = Color.White,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.size(8.dp))
-                    Text("Arrière", color = Color.White)
+                    Text("Arrière")
                 }
             }
 
@@ -391,10 +412,11 @@ private fun CameraSelectionCard(
 
 @Composable
 private fun NetworkInfoCard(
-    localIp: String?,
     streamingUrl: String?,
     onCopyUrl: () -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
@@ -412,23 +434,12 @@ private fun NetworkInfoCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            if (localIp != null) {
-                InfoRow(label = "📍 Adresse IP locale", value = localIp)
-            } else {
-                Text(
-                    text = "WiFi non connecté",
-                    fontSize = 14.sp,
-                    color = Color.Red
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
 
             if (streamingUrl != null) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
+                        .background(colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
                         .padding(8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -441,13 +452,13 @@ private fun NetworkInfoCard(
                         Text(
                             text = "🎬 URL de streaming",
                             fontSize = 12.sp,
-                            color = Color.Gray
+                            color = colorScheme.onSurfaceVariant
                         )
                         Text(
                             text = streamingUrl,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
-                            color = Color.Black,
+                            color = colorScheme.onSurface,
                             maxLines = 2,
                             fontFamily = FontFamily.Monospace
                         )
@@ -460,7 +471,7 @@ private fun NetworkInfoCard(
                         Icon(
                             imageVector = Icons.Default.ContentCopy,
                             contentDescription = "Copier URL",
-                            tint = Color(0xFF2196F3)
+                            tint = colorScheme.primary
                         )
                     }
                 }
@@ -468,7 +479,7 @@ private fun NetworkInfoCard(
                 Text(
                     text = "URL non disponible",
                     fontSize = 14.sp,
-                    color = Color.Red
+                    color = colorScheme.error
                 )
             }
         }
@@ -522,25 +533,3 @@ private fun WakeLockCard(
     }
 }
 
-@Composable
-private fun InfoRow(label: String, value: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
-            .padding(12.dp)
-    ) {
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            color = Color.Gray
-        )
-        Text(
-            text = value,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            color = Color.Black,
-            fontFamily = FontFamily.Monospace
-        )
-    }
-}
