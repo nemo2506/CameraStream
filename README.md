@@ -197,7 +197,7 @@ curl -vk -X OPTIONS https://cam.exemple.com/api/webrtc/offer \
 ## Build local 🛠️
 
 ```powershell
-Set-Location "D:\PATH\apps\CameraStream"
+Set-Location "D:\PATH\TO\CameraStream"
 .\gradlew.bat :app:assembleDebug
 ```
 
