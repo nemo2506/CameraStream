@@ -54,51 +54,63 @@ fun AdminScreen(viewModel: AdminViewModel, modifier: Modifier = Modifier) {
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Header
         Text(
             text = "Administration - Streaming Caméra",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
         )
-
-        // Détection Réseau Section
-        NetworkDetectionSection(
-            uiState = uiState,
-            onRefresh = { viewModel.refreshNetworkDetection() }
+        Text(
+            text = "Démarrez la diffusion, copiez l'URL du flux et réglez la caméra depuis cette page.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        // Status Card
         StatusCard(isStreaming = uiState.isStreaming)
 
-        // Control Buttons
         ControlButtonsSection(
             isStreaming = uiState.isStreaming,
             onStartStreaming = { viewModel.startStreaming() },
             onStopStreaming = { viewModel.stopStreaming() }
         )
 
-        // Camera Selection
-        CameraSelectionCard(
-            isFrontCamera = uiState.isFrontCamera,
-            onSwitchCamera = { viewModel.switchCamera() }
-        )
-
-        // Network Information
         NetworkInfoCard(
             streamingUrl = uiState.streamingUrl,
             onCopyUrl = { viewModel.copyUrlToClipboard() }
         )
 
-        // Wake Lock Control
+        SectionLabel(text = "Réglages")
+
+        CameraSelectionCard(
+            isFrontCamera = uiState.isFrontCamera,
+            onSwitchCamera = { viewModel.switchCamera() }
+        )
+
         WakeLockCard(
             isStreaming = uiState.isStreaming,
             isWakeLockActive = uiState.isWakeLockActive,
             onWakeLockChanged = { enabled -> viewModel.setWakeLockEnabled(enabled) }
         )
 
+        SectionLabel(text = "Réseau")
+
+        NetworkDetectionSection(
+            uiState = uiState,
+            onRefresh = { viewModel.refreshNetworkDetection() }
+        )
+
         Spacer(modifier = Modifier.height(16.dp))
     }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.primary
+    )
 }
 
 @Composable
@@ -426,7 +438,7 @@ private fun NetworkInfoCard(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "🌐 Informations de connexion",
+                text = "🌐 Url de streaming",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
