@@ -80,7 +80,7 @@ fun AdminScreen(viewModel: AdminViewModel, modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            text = "Administration - Streaming Caméra",
+            text = "Administration - WebRTC",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
@@ -802,4 +802,3 @@ private fun WakeLockCard(
         }
     }
 }
-

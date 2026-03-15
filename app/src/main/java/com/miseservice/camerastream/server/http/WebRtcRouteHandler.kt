@@ -1,5 +1,6 @@
 package com.miseservice.camerastream.server.http
 
+import android.os.Build
 import com.miseservice.camerastream.domain.model.BatteryInfo
 import com.miseservice.camerastream.server.signaling.SignalingDataSource
 import kotlinx.coroutines.runBlocking
@@ -28,8 +29,18 @@ class WebRtcRouteHandler(
                     statusCode = 200,
                     statusText = "OK",
                     contentType = "text/html",
-                    body = VIEWER_HTML,
+                    body = viewerHtml(),
                     extraHeaders = mapOf("Cache-Control" to "no-cache")
+                )
+            }
+
+            method == "GET" && request.path == "/favicon.ico" -> {
+                HttpResponse(
+                    statusCode = 200,
+                    statusText = "OK",
+                    contentType = "image/svg+xml",
+                    body = FAVICON_SVG,
+                    extraHeaders = mapOf("Cache-Control" to "public, max-age=86400")
                 )
             }
 
@@ -65,6 +76,35 @@ class WebRtcRouteHandler(
                 )
             }
         }
+    }
+
+    private fun viewerHtml(): String {
+        val title = escapeHtml(deviceModelTitle())
+        return VIEWER_HTML_TEMPLATE.replace("__DEVICE_TITLE__", title)
+    }
+
+    private fun deviceModelTitle(): String {
+        val manufacturer = Build.MANUFACTURER?.trim().orEmpty()
+        val model = Build.MODEL?.trim().orEmpty()
+        val combined = when {
+            model.isBlank() -> "Android Camera"
+            manufacturer.isBlank() -> model
+            model.startsWith(manufacturer, ignoreCase = true) -> model
+            else -> "$manufacturer $model"
+        }
+        return combined
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .ifBlank { "Android Camera" }
+    }
+
+    private fun escapeHtml(value: String): String {
+        return value
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&#39;")
     }
 
     private fun corsHeaders(): Map<String, String> = mapOf(
@@ -137,15 +177,31 @@ class WebRtcRouteHandler(
     }
 
     companion object {
-        private val VIEWER_HTML = """
-            <!doctype html>
-            <html lang="fr">
-            <head>
-              <meta charset="utf-8"/>
-              <meta name="viewport" content="width=device-width,initial-scale=1"/>
-              <meta name="theme-color" content="#0f1115"/>
-              <title>CameraStream</title>
-              <style>
+        private val FAVICON_SVG = """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+              <defs>
+                <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#4f46e5"/>
+                  <stop offset="100%" stop-color="#0ea5e9"/>
+                </linearGradient>
+              </defs>
+              <rect width="64" height="64" rx="14" fill="url(#g)"/>
+              <path d="M16 24h10l5-5h10l5 5h2a6 6 0 0 1 6 6v14a6 6 0 0 1-6 6H16a6 6 0 0 1-6-6V30a6 6 0 0 1 6-6z" fill="#ffffff" fill-opacity=".92"/>
+              <circle cx="32" cy="37" r="10" fill="#1f2937"/>
+              <circle cx="32" cy="37" r="6" fill="#93c5fd"/>
+            </svg>
+        """.trimIndent()
+
+         private val VIEWER_HTML_TEMPLATE = """
+             <!doctype html>
+             <html lang="fr">
+             <head>
+               <meta charset="utf-8"/>
+               <meta name="viewport" content="width=device-width,initial-scale=1"/>
+               <meta name="theme-color" content="#0f1115"/>
+               <title>__DEVICE_TITLE__</title>
+               <link rel="icon" type="image/svg+xml" href="/favicon.ico"/>
+               <style>
                 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
                 html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:system-ui,sans-serif}
 
@@ -153,6 +209,12 @@ class WebRtcRouteHandler(
                 #v{
                   display:block;width:100%;height:100vh;
                   object-fit:cover;background:#000;
+                }
+                #v.force-landscape{
+                  transform:rotate(90deg);
+                  transform-origin:center center;
+                  width:100vh;
+                  height:100vw;
                 }
 
                 /* Barre admin flottante compacte */
@@ -300,6 +362,25 @@ class WebRtcRouteHandler(
                   fitBtn.title = fitMode === 'cover' ? 'Passer en fit' : 'Passer en fill';
                   fitBtn.setAttribute('aria-label', fitBtn.title);
                 }
+                function getVideoOrientationKind() {
+                  const width = videoEl.videoWidth || 0;
+                  const height = videoEl.videoHeight || 0;
+                  if (!width || !height) return 'unknown';
+                  return width >= height ? 'landscape' : 'portrait';
+                }
+
+                function getScreenOrientationKind() {
+                  return window.matchMedia('(orientation: portrait)').matches
+                    ? 'portrait'
+                    : 'landscape';
+                }
+
+                function applyOrientationFallback() {
+                  const videoKind = getVideoOrientationKind();
+                  const screenKind = getScreenOrientationKind();
+                  const forceLandscape = screenKind === 'landscape' && videoKind === 'portrait';
+                  videoEl.classList.toggle('force-landscape', forceLandscape);
+                }
 
                 function updateClock() {
                   const now = new Date();
@@ -316,6 +397,7 @@ class WebRtcRouteHandler(
                   const width = videoEl.videoWidth || 0;
                   const height = videoEl.videoHeight || 0;
                   resolutionEl.textContent = width > 0 && height > 0 ? `${'$'}{width}×${'$'}{height}` : '--';
+                  applyOrientationFallback();
                 }
 
                 function scheduleReconnect() {
@@ -362,6 +444,8 @@ class WebRtcRouteHandler(
                 document.addEventListener('keydown',     showBar);
                 videoEl.addEventListener('loadedmetadata', updateResolution);
                 videoEl.addEventListener('resize', updateResolution);
+                window.addEventListener('orientationchange', applyOrientationFallback);
+                window.addEventListener('resize', applyOrientationFallback);
                 showBar();
 
                 /* ── Etat dot ── */
@@ -417,7 +501,12 @@ class WebRtcRouteHandler(
                     setTimeout(() => { pc.removeEventListener('icegatheringstatechange', fn); resolve(); }, 3000);
                   });
 
-                  pc.ontrack = e => { if (e.streams?.[0]) videoEl.srcObject = e.streams[0]; };
+                  pc.ontrack = e => {
+                    if (e.streams?.[0]) {
+                      videoEl.srcObject = e.streams[0];
+                      setTimeout(applyOrientationFallback, 150);
+                    }
+                  };
 
                   pc.onconnectionstatechange = () => {
                     const s = pc.connectionState;
@@ -466,4 +555,3 @@ class WebRtcRouteHandler(
         """.trimIndent()
     }
 }
-
