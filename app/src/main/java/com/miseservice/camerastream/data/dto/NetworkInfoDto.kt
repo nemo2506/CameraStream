@@ -5,6 +5,7 @@ data class NetworkInfoDto(
     val localIpAddress: String?,
     val streamingUrl: String?,
     val statusUrl: String?,
+    val batteryApiUrl: String?,
     val wifiNetworkName: String?,
     val errorMessage: String?
 )

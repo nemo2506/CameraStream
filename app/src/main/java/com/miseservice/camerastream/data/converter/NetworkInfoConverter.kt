@@ -10,6 +10,7 @@ object NetworkInfoConverter {
             localIpAddress = dto.localIpAddress,
             streamingUrl = dto.streamingUrl,
             statusUrl = dto.statusUrl,
+            batteryApiUrl = dto.batteryApiUrl,
             wifiNetworkName = dto.wifiNetworkName,
             errorMessage = dto.errorMessage
         )

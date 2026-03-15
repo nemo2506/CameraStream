@@ -193,6 +193,14 @@ object NetworkUtils {
     }
 
     /**
+     * Formate l'URL de l'API batterie avec l'IP détectée
+     */
+    fun getBatteryApiUrl(context: Context, port: Int = 8080): String? {
+        val ipAddress = getLocalIpAddress(context) ?: return null
+        return "http://$ipAddress:$port/api/battery"
+    }
+
+    /**
      * Formate l'URL du streaming avec l'IP détectée
      */
     fun getStreamingUrl(context: Context, port: Int = 8080): String? {

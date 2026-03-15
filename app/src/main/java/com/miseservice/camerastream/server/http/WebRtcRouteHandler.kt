@@ -1,11 +1,13 @@
 package com.miseservice.camerastream.server.http
 
+import com.miseservice.camerastream.domain.model.BatteryInfo
 import com.miseservice.camerastream.server.signaling.SignalingDataSource
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 
 class WebRtcRouteHandler(
-    private val signalingDataSource: SignalingDataSource
+    private val signalingDataSource: SignalingDataSource,
+    private val batteryProvider: () -> BatteryInfo? = { null }
 ) {
     fun handle(request: HttpRequest): HttpResponse {
         val method = request.method.uppercase()
@@ -49,6 +51,10 @@ class WebRtcRouteHandler(
                 )
             }
 
+            method == "GET" && request.path == "/api/battery" -> {
+                handleBattery()
+            }
+
             else -> {
                 HttpResponse(
                     statusCode = 404,
@@ -67,6 +73,29 @@ class WebRtcRouteHandler(
         "Access-Control-Allow-Headers" to "Content-Type, Authorization",
         "Access-Control-Max-Age" to "86400"
     )
+
+    private fun handleBattery(): HttpResponse {
+        val battery = batteryProvider()
+        if (battery == null) {
+            return HttpResponse(
+                statusCode = 503,
+                statusText = "Service Unavailable",
+                contentType = "application/json",
+                body = """{"ok":false,"code":503,"message":"battery_unavailable"}""",
+                extraHeaders = corsHeaders()
+            )
+        }
+        val tempStr = battery.temperatureC?.toString() ?: "null"
+        val statusRaw = battery.status
+            .replace("\\", "\\\\").replace("\"", "\\\"")
+        return HttpResponse(
+            statusCode = 200,
+            statusText = "OK",
+            contentType = "application/json",
+            body = """{"ok":true,"levelPercent":${battery.levelPercent},"isCharging":${battery.isCharging},"status":"$statusRaw","temperatureC":$tempStr,"timestampMs":${battery.timestampMs}}""",
+            extraHeaders = corsHeaders()
+        )
+    }
 
     private fun handleOffer(body: String): HttpResponse {
         return try {
@@ -219,6 +248,12 @@ class WebRtcRouteHandler(
                   </span>
                   <span id="resolution">--</span>
                 </span>
+                <span class="pill meta" id="battery-pill">
+                  <span class="icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><rect x="2" y="7" width="18" height="10" rx="2"/><path d="M22 11v2"/><rect id="bat-fill" x="4" y="9" width="10" height="6" rx="1"/></svg>
+                  </span>
+                  <span id="battery-text">--%</span>
+                </span>
                 <button id="btn-mute" title="Activer le son" data-muted="true" aria-label="Activer le son">
                   <svg class="icon-volume-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9h4l5-4v14l-5-4H5z"/><path d="M17 9a4 4 0 0 1 0 6"/><path d="M19.5 6.5a7.5 7.5 0 0 1 0 11"/></svg>
                   <svg class="icon-volume-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9h4l5-4v14l-5-4H5z"/><path d="M17 9l4 6"/><path d="M21 9l-4 6"/></svg>
@@ -240,6 +275,8 @@ class WebRtcRouteHandler(
                 const bar       = document.getElementById('bar');
                 const clockEl   = document.getElementById('clock');
                 const resolutionEl = document.getElementById('resolution');
+                const batteryEl = document.getElementById('battery-text');
+                const batteryPill = document.getElementById('battery-pill');
                 const muteBtn   = document.getElementById('btn-mute');
                 const fitBtn    = document.getElementById('btn-fit');
                 let pc = null;
@@ -248,6 +285,7 @@ class WebRtcRouteHandler(
                 let viewersTimer = null;
                 let clockTimer  = null;
                 let reconnectTimer = null;
+                let batteryTimer = null;
                 let fitMode = localStorage.getItem('viewer-fit-mode') || 'cover';
 
                 function updateMuteButton() {
@@ -339,6 +377,30 @@ class WebRtcRouteHandler(
                   } catch(_) {}
                 }
 
+                /* ── Batterie ── */
+                async function fetchBattery() {
+                  try {
+                    const b = await (await fetch('/api/battery')).json();
+                    if (!b || b.ok === false || typeof b.levelPercent !== 'number') {
+                      batteryEl.textContent = '--%';
+                      batteryPill.style.color = '';
+                      return;
+                    }
+                    const parts = [b.levelPercent + '%'];
+                    if (typeof b.temperatureC === 'number') parts.push(Math.round(b.temperatureC) + '°C');
+                    if (b.isCharging) parts.push('⚡');
+                    batteryEl.textContent = parts.join(' ');
+                    const fill = document.getElementById('bat-fill');
+                    const w = Math.round((b.levelPercent / 100) * 10);
+                    if (fill) fill.setAttribute('width', String(w));
+                    if (b.levelPercent < 20) batteryPill.style.color = '#ef4444';
+                    else if (b.levelPercent < 50) batteryPill.style.color = '#f59e0b';
+                    else batteryPill.style.color = '#22c55e';
+                  } catch(_) {
+                    batteryEl.textContent = '--%';
+                  }
+                }
+
                 /* ── Connexion WebRTC ── */
                 async function connect() {
                   if (reconnectTimer) {
@@ -396,6 +458,8 @@ class WebRtcRouteHandler(
 
 
                 connect();
+                fetchBattery();
+                if (!batteryTimer) batteryTimer = setInterval(fetchBattery, 5000);
               </script>
             </body>
             </html>

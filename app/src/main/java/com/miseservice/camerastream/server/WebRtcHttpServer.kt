@@ -1,6 +1,7 @@
 package com.miseservice.camerastream.server
 
 import android.util.Log
+import com.miseservice.camerastream.domain.model.BatteryInfo
 import com.miseservice.camerastream.server.http.HttpRequestParser
 import com.miseservice.camerastream.server.http.HttpResponse
 import com.miseservice.camerastream.server.http.HttpResponseWriter
@@ -14,9 +15,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class WebRtcHttpServer(
     private val port: Int = 8080,
-    private val webRtcSessionGateway: WebRtcSessionGateway
+    private val webRtcSessionGateway: WebRtcSessionGateway,
+    private val batteryProvider: () -> BatteryInfo? = { null }
 ) {
-    private val routeHandler = WebRtcRouteHandler(WebRtcSignalingDataSource(webRtcSessionGateway))
+    private val routeHandler = WebRtcRouteHandler(
+        WebRtcSignalingDataSource(webRtcSessionGateway),
+        batteryProvider
+    )
     private val isRunning = AtomicBoolean(false)
     private var serverSocket: ServerSocket? = null
     private var serverThread: Thread? = null

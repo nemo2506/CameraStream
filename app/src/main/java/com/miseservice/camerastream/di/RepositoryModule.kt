@@ -1,9 +1,11 @@
 package com.miseservice.camerastream.di
 
 import com.miseservice.camerastream.data.repository.AdminSettingsRepositoryImpl
+import com.miseservice.camerastream.data.repository.BatteryRepositoryImpl
 import com.miseservice.camerastream.data.repository.NetworkRepositoryImpl
 import com.miseservice.camerastream.data.repository.StreamingRepositoryImpl
 import com.miseservice.camerastream.domain.repository.AdminSettingsRepository
+import com.miseservice.camerastream.domain.repository.BatteryRepository
 import com.miseservice.camerastream.domain.repository.NetworkRepository
 import com.miseservice.camerastream.domain.repository.StreamingRepository
 import dagger.Binds
@@ -32,5 +34,11 @@ abstract class RepositoryModule {
     abstract fun bindStreamingRepository(
         impl: StreamingRepositoryImpl
     ): StreamingRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindBatteryRepository(
+        impl: BatteryRepositoryImpl
+    ): BatteryRepository
 }
 

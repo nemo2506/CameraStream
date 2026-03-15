@@ -21,6 +21,7 @@ class NetworkRepositoryImpl @Inject constructor(
                     localIpAddress = null,
                     streamingUrl = null,
                     statusUrl = null,
+                    batteryApiUrl = null,
                     wifiNetworkName = null,
                     errorMessage = "WiFi non connecté. Veuillez connecter le WiFi."
                 )
@@ -33,6 +34,7 @@ class NetworkRepositoryImpl @Inject constructor(
             localIpAddress = ipAddress,
             streamingUrl = NetworkUtils.getStreamingUrl(context, port),
             statusUrl = NetworkUtils.getStatusUrl(context, port),
+            batteryApiUrl = NetworkUtils.getBatteryApiUrl(context, port),
             wifiNetworkName = NetworkUtils.getWifiNetworkName(context),
             errorMessage = if (ipAddress == null) {
                 "Impossible de détecter l'adresse IP. Essayez de reconnecter le WiFi."

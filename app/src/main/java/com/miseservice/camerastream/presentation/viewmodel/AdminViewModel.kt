@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.miseservice.camerastream.domain.model.AdminSettings
 import com.miseservice.camerastream.domain.usecase.CopyToClipboardUseCase
+import com.miseservice.camerastream.domain.usecase.FetchBatteryInfoUseCase
 import com.miseservice.camerastream.domain.usecase.FetchNetworkInfoUseCase
 import com.miseservice.camerastream.domain.usecase.LoadAdminSettingsUseCase
 import com.miseservice.camerastream.domain.usecase.SaveAdminSettingsUseCase
@@ -26,6 +27,11 @@ data class AdminUiState(
     val localIpAddress: String? = null,
     val streamingUrl: String? = null,
     val statusUrl: String? = null,
+    val batteryApiUrl: String? = null,
+    val batteryLevelPercent: Int? = null,
+    val isBatteryCharging: Boolean = false,
+    val batteryStatusLabel: String? = null,
+    val batteryTemperatureC: Float? = null,
     val isWifiConnected: Boolean = false,
     val wifiNetworkName: String? = null,
     val ipChangeNotice: String? = null,
@@ -39,6 +45,7 @@ class AdminViewModel @Inject constructor(
     private val loadAdminSettingsUseCase: LoadAdminSettingsUseCase,
     private val saveAdminSettingsUseCase: SaveAdminSettingsUseCase,
     private val fetchNetworkInfoUseCase: FetchNetworkInfoUseCase,
+    private val fetchBatteryInfoUseCase: FetchBatteryInfoUseCase,
     private val startStreamingUseCase: StartStreamingUseCase,
     private val stopStreamingUseCase: StopStreamingUseCase,
     private val switchCameraUseCase: SwitchCameraUseCase,
@@ -57,6 +64,23 @@ class AdminViewModel @Inject constructor(
             initializeNetworkDetection()
         }
         startIpMonitoring()
+        observeBattery()
+    }
+
+    /**
+     * Observe les changements de batterie en temps réel
+     */
+    private fun observeBattery() {
+        viewModelScope.launch {
+            fetchBatteryInfoUseCase.batteryInfoFlow.collect { battery ->
+                _uiState.value = _uiState.value.copy(
+                    batteryLevelPercent = battery?.levelPercent,
+                    isBatteryCharging = battery?.isCharging ?: false,
+                    batteryStatusLabel = battery?.status,
+                    batteryTemperatureC = battery?.temperatureC
+                )
+            }
+        }
     }
 
     /**
@@ -77,6 +101,7 @@ class AdminViewModel @Inject constructor(
                         localIpAddress = networkInfo.localIpAddress,
                         streamingUrl = networkInfo.streamingUrl,
                         statusUrl = networkInfo.statusUrl,
+                        batteryApiUrl = networkInfo.batteryApiUrl,
                         isWifiConnected = networkInfo.isWifiConnected,
                         wifiNetworkName = networkInfo.wifiNetworkName,
                         ipChangeNotice = if (showIpChangeNotice) {
@@ -96,6 +121,7 @@ class AdminViewModel @Inject constructor(
                         localIpAddress = networkInfo.localIpAddress,
                         streamingUrl = networkInfo.streamingUrl,
                         statusUrl = networkInfo.statusUrl,
+                        batteryApiUrl = networkInfo.batteryApiUrl,
                         wifiNetworkName = networkInfo.wifiNetworkName,
                         errorMessage = networkInfo.errorMessage,
                         isLoading = false

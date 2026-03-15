@@ -18,6 +18,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatteryAlert
+import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.CameraFront
 import androidx.compose.material.icons.filled.CameraRear
 import androidx.compose.material.icons.filled.ContentCopy
@@ -407,7 +410,92 @@ private fun NetworkDetectionSection(
                         fontFamily = FontFamily.Monospace
                     )
                 }
+
+                // Batterie
+                BatteryInfoSection(uiState = uiState)
             }
+        }
+    }
+}
+
+@Composable
+private fun BatteryInfoSection(
+    uiState: com.miseservice.camerastream.presentation.viewmodel.AdminUiState
+) {
+    val batteryColor = when {
+        uiState.batteryLevelPercent == null -> MaterialTheme.colorScheme.onSurfaceVariant
+        uiState.batteryLevelPercent < 20 -> MaterialTheme.colorScheme.error
+        uiState.batteryLevelPercent < 50 -> Color(0xFFF59E0B)
+        else -> Color(0xFF22C55E)
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        // Titre et niveau
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val battIcon = when {
+                uiState.batteryLevelPercent == null -> Icons.Default.BatteryAlert
+                uiState.isBatteryCharging -> Icons.Default.BatteryChargingFull
+                uiState.batteryLevelPercent < 20 -> Icons.Default.BatteryAlert
+                else -> Icons.Default.BatteryFull
+            }
+            Icon(
+                imageVector = battIcon,
+                contentDescription = "Batterie",
+                tint = batteryColor,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = "Batterie",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        // Valeur détaillée
+        val batteryText = buildString {
+            if (uiState.batteryLevelPercent == null) {
+                append("Indisponible")
+            } else {
+                append("${uiState.batteryLevelPercent}%")
+                uiState.batteryStatusLabel?.let { append(" · $it") }
+                uiState.batteryTemperatureC?.let {
+                    append(" · ${String.format(java.util.Locale.US, "%.1f", it)}°C")
+                }
+                if (uiState.isBatteryCharging) append(" ⚡")
+            }
+        }
+        Text(
+            text = batteryText,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            color = batteryColor
+        )
+
+        // URL API batterie
+        if (uiState.batteryApiUrl != null) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "API Batterie",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = uiState.batteryApiUrl,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }
